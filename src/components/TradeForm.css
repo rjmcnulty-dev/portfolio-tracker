@@ -1,0 +1,29 @@
+.trade-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trade-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.trade-form__notes {
+  grid-column: 1 / -1;
+}
+
+.trade-form__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0;
+}
+
+.trade-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #edf0f3;
+  padding-top: 16px;
+}

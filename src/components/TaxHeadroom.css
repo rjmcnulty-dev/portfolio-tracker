@@ -1,0 +1,54 @@
+.tax-card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+}
+
+.tax-card__title {
+  font-size: 14px;
+  color: var(--navy-dark);
+  margin-bottom: 16px;
+}
+
+.tax-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tax-form__notes {
+  width: 100%;
+}
+
+.tax-form__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0;
+}
+
+.tax-card__headroom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--navy-dark);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.tax-card__headroom-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted-on-dark);
+}
+
+.tax-card__headroom-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.tax-card__headroom-value.is-negative {
+  color: var(--red);
+}
