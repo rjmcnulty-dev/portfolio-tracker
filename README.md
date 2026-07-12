@@ -3,7 +3,8 @@
 A React + Vite portfolio tracker backed by Supabase. Tracks trades across three accounts
 (Robinhood, Traditional IRA, Roth IRA), aggregates KPIs and allocation/P&L charts, and
 includes tools for tax-bracket headroom and a 4-year Roth conversion plan. Current market
-prices refresh once a day via a scheduled GitHub Actions job pulling from Twelve Data.
+prices refresh automatically once a day via a scheduled GitHub Actions job, or on demand
+from the Prices page, both pulling from Twelve Data.
 
 ## Stack
 
@@ -13,7 +14,7 @@ prices refresh once a day via a scheduled GitHub Actions job pulling from Twelve
 - React Router (`HashRouter`) for navigation
 - Plain CSS (no framework), dark-navy financial theme
 - [Twelve Data](https://twelvedata.com/) for daily stock prices, fetched by a scheduled
-  GitHub Actions workflow
+  GitHub Actions workflow and by a Supabase Edge Function (on-demand refresh)
 
 ## Setup
 
@@ -167,6 +168,12 @@ tab (`workflow_dispatch`). `usePortfolio` overlays the latest price onto each op
 trade row to compute live `market_value` and `unrealized_pnl` — the underlying `trades`
 rows in Supabase are never modified by the job, only `ticker_prices` is.
 
+The **Prices** page (`/prices`) lets you override any ticker's price by hand — useful
+right after adding a trade (before the next scheduled run) or for a ticker Twelve Data
+doesn't cover. It writes to the same `ticker_prices` table via `useTickerPrices`'s
+`updatePrice`, so manual and automatic updates are interchangeable; whichever ran most
+recently wins.
+
 To run it locally:
 
 ```bash
@@ -182,6 +189,39 @@ For the scheduled workflow to run, add `TWELVE_DATA_API_KEY` as a repository sec
 free API key at [twelvedata.com](https://twelvedata.com/). Never prefix it `VITE_` — that
 would bundle it into the client-side JS and expose it publicly.
 
+## On-demand price refresh (Edge Function)
+
+The **Update All Prices** button on the Prices page can't safely call Twelve Data
+directly from the browser (same reason as above — the key would leak), and it can't
+safely trigger the GitHub Actions workflow either (that would require embedding a GitHub
+token client-side, which is worse). Instead it calls a Supabase Edge Function,
+`supabase/functions/refresh-prices`, which holds `TWELVE_DATA_API_KEY` as a Supabase
+secret and runs the same fetch/upsert logic as `scripts/fetch-prices.mjs`, server-side.
+
+To deploy it (requires the [Supabase CLI](https://supabase.com/docs/guides/cli), run here
+via `npx supabase`):
+
+```bash
+# One-time: authenticate the CLI and link this repo to your Supabase project.
+# `supabase login` opens a browser; in a non-interactive environment, generate a
+# personal access token instead at https://supabase.com/dashboard/account/tokens
+# and set SUPABASE_ACCESS_TOKEN=<token> before running these commands.
+npx supabase login
+npx supabase link --project-ref your-project-ref
+
+# Give the function its own copy of the Twelve Data key (separate from the
+# GitHub Actions secret — this one lives in Supabase, not GitHub).
+npx supabase secrets set TWELVE_DATA_API_KEY=your_twelve_data_key
+
+# Deploy.
+npx supabase functions deploy refresh-prices
+```
+
+The function is called from the browser via `supabase.functions.invoke('refresh-prices')`
+(see `useTickerPrices`'s `refreshAll`) using the public anon/publishable key — no secret
+ever reaches the client. Re-run `supabase functions deploy refresh-prices` any time
+`supabase/functions/refresh-prices/index.ts` changes.
+
 ## App structure
 
 ```
@@ -191,7 +231,7 @@ src/
     accounts.js         # Account slug <-> label mapping
   hooks/
     useTrades.js         # Fetch/add/update/delete trades, optionally filtered by account
-    useTickerPrices.js    # Latest daily price per ticker from ticker_prices
+    useTickerPrices.js    # Latest price per ticker; updatePrice() for manual edits, refreshAll() calls the Edge Function
     usePortfolio.js       # KPIs, allocation %, and P&L-by-ticker; overlays live prices onto open lots
   components/
     Layout.jsx            # Sidebar nav + main content outlet
@@ -202,13 +242,18 @@ src/
     TradeForm.jsx          # Add/edit trade modal, writes directly to Supabase
     TaxHeadroom.jsx        # Headroom calculator, reads/writes tax_settings
     RothProgress.jsx       # 4-year conversion progress from roth_conversions
+    TickerPrices.jsx       # Per-ticker price table: inline "Update Price" edits + "Update All Prices" button
   pages/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
     TradesPage.jsx          # Full trade log with add/edit/filter
+    PricesPage.jsx          # Manual price overrides (/prices)
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
+supabase/
+  functions/
+    refresh-prices/          # On-demand version of the same job, called by "Update All Prices" (see "On-demand price refresh")
 ```
 
 ## Deployment

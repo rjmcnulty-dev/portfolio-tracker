@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useTickerPrices() {
@@ -6,32 +6,51 @@ export function useTickerPrices() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    let ignore = false
+  const fetchPrices = useCallback(async () => {
+    setLoading(true)
+    const { data, error: fetchError } = await supabase.from('ticker_prices').select('*')
 
-    async function load() {
-      setLoading(true)
-      const { data, error: fetchError } = await supabase.from('ticker_prices').select('*')
-
-      if (!ignore) {
-        if (fetchError) {
-          setError(fetchError.message)
-        } else {
-          const byTicker = {}
-          for (const row of data ?? []) {
-            byTicker[row.ticker] = row
-          }
-          setPrices(byTicker)
-        }
-        setLoading(false)
+    if (fetchError) {
+      setError(fetchError.message)
+    } else {
+      setError(null)
+      const byTicker = {}
+      for (const row of data ?? []) {
+        byTicker[row.ticker] = row
       }
+      setPrices(byTicker)
     }
-
-    load()
-    return () => {
-      ignore = true
-    }
+    setLoading(false)
   }, [])
 
-  return { prices, loading, error }
+  useEffect(() => {
+    fetchPrices()
+  }, [fetchPrices])
+
+  const updatePrice = useCallback(
+    async (ticker, price) => {
+      const { error: upsertError } = await supabase.from('ticker_prices').upsert(
+        {
+          ticker,
+          price: Number(price),
+          as_of: new Date().toISOString().slice(0, 10),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'ticker' },
+      )
+      if (upsertError) throw upsertError
+      await fetchPrices()
+    },
+    [fetchPrices],
+  )
+
+  const refreshAll = useCallback(async () => {
+    const { data, error: invokeError } = await supabase.functions.invoke('refresh-prices')
+    if (invokeError) throw invokeError
+    if (data?.error) throw new Error(data.error)
+    await fetchPrices()
+    return data
+  }, [fetchPrices])
+
+  return { prices, loading, error, updatePrice, refreshAll, refetch: fetchPrices }
 }

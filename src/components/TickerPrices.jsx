@@ -1,0 +1,158 @@
+import { useMemo, useState } from 'react'
+import { useTrades } from '../hooks/useTrades'
+import { useTickerPrices } from '../hooks/useTickerPrices'
+import './TickerPrices.css'
+
+function formatCurrency(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return 'never'
+  return new Date(iso).toLocaleString('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+export default function TickerPrices() {
+  const { trades, loading: tradesLoading } = useTrades('All')
+  const { prices, loading: pricesLoading, error, updatePrice, refreshAll } = useTickerPrices()
+
+  const [editingTicker, setEditingTicker] = useState(null)
+  const [draftPrice, setDraftPrice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState(null)
+  const [refreshMessage, setRefreshMessage] = useState(null)
+
+  const tickers = useMemo(
+    () => [...new Set(trades.map((t) => t.ticker).filter(Boolean))].sort(),
+    [trades],
+  )
+
+  const lastRefreshed = useMemo(() => {
+    const timestamps = Object.values(prices)
+      .map((row) => row.updated_at)
+      .filter(Boolean)
+    if (!timestamps.length) return null
+    return timestamps.reduce((latest, ts) => (ts > latest ? ts : latest))
+  }, [prices])
+
+  async function handleRefreshAll() {
+    setRefreshing(true)
+    setRefreshError(null)
+    setRefreshMessage(null)
+    try {
+      const result = await refreshAll()
+      setRefreshMessage(result?.message ?? 'Prices updated.')
+    } catch (err) {
+      setRefreshError(err.message)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  function startEdit(ticker) {
+    setEditingTicker(ticker)
+    setDraftPrice(prices[ticker]?.price ?? '')
+    setSaveError(null)
+  }
+
+  function cancelEdit() {
+    setEditingTicker(null)
+    setDraftPrice('')
+    setSaveError(null)
+  }
+
+  async function handleSave(ticker) {
+    if (draftPrice === '' || Number.isNaN(Number(draftPrice))) {
+      setSaveError('Enter a valid price.')
+      return
+    }
+
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await updatePrice(ticker, draftPrice)
+      setEditingTicker(null)
+      setDraftPrice('')
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (tradesLoading || pricesLoading) return <div className="ticker-prices__empty">Loading prices…</div>
+  if (error) return <div className="ticker-prices__empty">Error: {error}</div>
+  if (!tickers.length) return <div className="ticker-prices__empty">No tickers yet — add a trade first.</div>
+
+  return (
+    <div className="ticker-prices-wrap">
+      <div className="ticker-prices__toolbar">
+        <span className="ticker-prices__last-refreshed">Last refreshed: {formatTimestamp(lastRefreshed)}</span>
+        <button className="btn btn--primary" disabled={refreshing} onClick={handleRefreshAll}>
+          {refreshing ? 'Updating…' : 'Update All Prices'}
+        </button>
+      </div>
+      {refreshError && <p className="ticker-prices__error">{refreshError}</p>}
+      {refreshMessage && !refreshError && <p className="ticker-prices__message">{refreshMessage}</p>}
+      <table className="ticker-prices">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th className="is-numeric">Current Price</th>
+            <th>As Of</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {tickers.map((ticker) => {
+            const row = prices[ticker]
+            const isEditing = editingTicker === ticker
+            return (
+              <tr key={ticker}>
+                <td className="ticker-prices__ticker">{ticker}</td>
+                <td className="is-numeric">
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      step="any"
+                      autoFocus
+                      value={draftPrice}
+                      onChange={(e) => setDraftPrice(e.target.value)}
+                    />
+                  ) : (
+                    formatCurrency(row?.price)
+                  )}
+                </td>
+                <td>{row?.as_of ?? '—'}</td>
+                <td className="ticker-prices__actions">
+                  {isEditing ? (
+                    <>
+                      <button className="btn-link" disabled={saving} onClick={() => handleSave(ticker)}>
+                        {saving ? 'Saving…' : 'Save'}
+                      </button>
+                      <button className="btn-link" disabled={saving} onClick={cancelEdit}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn-link" onClick={() => startEdit(ticker)}>
+                      Update Price
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {saveError && <p className="ticker-prices__error">{saveError}</p>}
+    </div>
+  )
+}

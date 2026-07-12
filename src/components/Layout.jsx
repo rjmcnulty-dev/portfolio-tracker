@@ -27,6 +27,9 @@ export default function Layout() {
           <NavLink to="/trades" className={linkClass}>
             Trade Log
           </NavLink>
+          <NavLink to="/prices" className={linkClass}>
+            Prices
+          </NavLink>
           <NavLink to="/tax" className={linkClass}>
             Tax &amp; Roth
           </NavLink>

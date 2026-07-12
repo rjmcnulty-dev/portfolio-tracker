@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import AccountPage from './pages/AccountPage'
 import TaxPage from './pages/TaxPage'
 import TradesPage from './pages/TradesPage'
+import PricesPage from './pages/PricesPage'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="account/:accountSlug" element={<AccountPage />} />
           <Route path="trades" element={<TradesPage />} />
+          <Route path="prices" element={<PricesPage />} />
           <Route path="tax" element={<TaxPage />} />
         </Route>
       </Routes>

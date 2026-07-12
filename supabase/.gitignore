@@ -1,0 +1,3 @@
+# Supabase CLI local project state (project ref, cached versions, etc.)
+.temp
+.branches
