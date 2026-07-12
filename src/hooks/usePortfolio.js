@@ -1,8 +1,26 @@
 import { useMemo } from 'react'
 import { useTrades } from './useTrades'
+import { useTickerPrices } from './useTickerPrices'
 
 export function usePortfolio(account = 'All') {
-  const { trades, loading, error, addTrade, updateTrade, deleteTrade, refetch } = useTrades(account)
+  const { trades: rawTrades, loading, error, addTrade, updateTrade, deleteTrade, refetch } = useTrades(account)
+  const { prices: livePrices } = useTickerPrices()
+
+  // Live prices only overlay open (BUY) lots — a closed SELL lot's realized
+  // P&L shouldn't be recomputed as if it still carried market exposure.
+  const trades = useMemo(() => {
+    return rawTrades.map((trade) => {
+      const live = livePrices[trade.ticker]
+      if (trade.trade_type !== 'BUY' || !live) return trade
+      const marketValue = (Number(trade.quantity) || 0) * live.price
+      return {
+        ...trade,
+        market_price: live.price,
+        market_value: marketValue,
+        unrealized_pnl: marketValue - (Number(trade.cost_basis) || 0),
+      }
+    })
+  }, [rawTrades, livePrices])
 
   const totals = useMemo(() => {
     return trades.reduce(

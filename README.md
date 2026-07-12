@@ -2,7 +2,8 @@
 
 A React + Vite portfolio tracker backed by Supabase. Tracks trades across three accounts
 (Robinhood, Traditional IRA, Roth IRA), aggregates KPIs and allocation/P&L charts, and
-includes tools for tax-bracket headroom and a 4-year Roth conversion plan.
+includes tools for tax-bracket headroom and a 4-year Roth conversion plan. Current market
+prices refresh once a day via a scheduled GitHub Actions job pulling from Twelve Data.
 
 ## Stack
 
@@ -11,6 +12,8 @@ includes tools for tax-bracket headroom and a 4-year Roth conversion plan.
 - [Recharts](https://recharts.org/) for the allocation donut and P&L bar chart
 - React Router (`HashRouter`) for navigation
 - Plain CSS (no framework), dark-navy financial theme
+- [Twelve Data](https://twelvedata.com/) for daily stock prices, fetched by a scheduled
+  GitHub Actions workflow
 
 ## Setup
 
@@ -54,8 +57,8 @@ includes tools for tax-bracket headroom and a 4-year Roth conversion plan.
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the three tables the app reads
-and writes: `trades`, `tax_settings`, and `roth_conversions`.
+Run the following in the Supabase SQL editor. It creates the four tables the app reads
+and writes: `trades`, `tax_settings`, `roth_conversions`, and `ticker_prices`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -118,6 +121,20 @@ create table if not exists roth_conversions (
 create index if not exists roth_conversions_year_idx on roth_conversions (year);
 
 -- ─────────────────────────────────────────────
+-- ticker_prices: latest daily close per ticker,
+-- written once a day by scripts/fetch-prices.mjs
+-- (see "Daily price refresh" below). usePortfolio
+-- overlays these onto open (BUY) trade rows to
+-- compute live market value / unrealized P&L.
+-- ─────────────────────────────────────────────
+create table if not exists ticker_prices (
+  ticker text primary key,
+  price numeric not null,
+  as_of date,
+  updated_at timestamptz not null default now()
+);
+
+-- ─────────────────────────────────────────────
 -- Row Level Security
 -- This app uses the anon key directly from the browser. For a
 -- single-user setup, enable RLS and allow all operations for now;
@@ -127,11 +144,43 @@ create index if not exists roth_conversions_year_idx on roth_conversions (year);
 alter table trades enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
+alter table ticker_prices enable row level security;
 
 create policy "Allow all on trades" on trades for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
+create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
 ```
+
+## Daily price refresh
+
+`scripts/fetch-prices.mjs` is a small Node script that:
+
+1. Reads the distinct set of tickers currently in `trades`
+2. Fetches their latest price from [Twelve Data](https://twelvedata.com/) (free tier: 800
+   calls/day)
+3. Upserts them into `ticker_prices`
+
+`.github/workflows/refresh-prices.yml` runs it automatically on weekdays at 21:00 UTC
+(shortly after the US market close), and can also be triggered manually from the Actions
+tab (`workflow_dispatch`). `usePortfolio` overlays the latest price onto each open (`BUY`)
+trade row to compute live `market_value` and `unrealized_pnl` — the underlying `trades`
+rows in Supabase are never modified by the job, only `ticker_prices` is.
+
+To run it locally:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_ANON_KEY=your_anon_key \
+TWELVE_DATA_API_KEY=your_twelve_data_key \
+npm run prices:fetch
+```
+
+For the scheduled workflow to run, add `TWELVE_DATA_API_KEY` as a repository secret
+(Settings → Secrets and variables → Actions) — it reuses the existing
+`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` secrets for the Supabase connection. Get a
+free API key at [twelvedata.com](https://twelvedata.com/). Never prefix it `VITE_` — that
+would bundle it into the client-side JS and expose it publicly.
 
 ## App structure
 
@@ -142,7 +191,8 @@ src/
     accounts.js         # Account slug <-> label mapping
   hooks/
     useTrades.js         # Fetch/add/update/delete trades, optionally filtered by account
-    usePortfolio.js       # KPIs, allocation %, and P&L-by-ticker derived from useTrades
+    useTickerPrices.js    # Latest daily price per ticker from ticker_prices
+    usePortfolio.js       # KPIs, allocation %, and P&L-by-ticker; overlays live prices onto open lots
   components/
     Layout.jsx            # Sidebar nav + main content outlet
     KPIRow.jsx             # 5 stat cards (invested, mkt value, unrealized, realized, total P&L)
@@ -157,6 +207,8 @@ src/
     AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
     TradesPage.jsx          # Full trade log with add/edit/filter
+scripts/
+  fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
 ```
 
 ## Deployment
@@ -165,4 +217,5 @@ A GitHub Actions workflow at `.github/workflows/deploy.yml` builds the app and d
 to GitHub Pages on every push to `main`. In your repo settings, set **Settings → Pages →
 Source** to **GitHub Actions**. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as
 repository secrets (Settings → Secrets and variables → Actions) so the build step can
-inject them.
+inject them. Add `TWELVE_DATA_API_KEY` as well so `.github/workflows/refresh-prices.yml`
+can run (see "Daily price refresh" above).
