@@ -16,7 +16,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # @supabase/supabase-js requires native WebSocket (Node 22+); Node 20 throws at createClient().
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
