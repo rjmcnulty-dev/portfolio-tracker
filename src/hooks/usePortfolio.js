@@ -80,20 +80,29 @@ export function usePortfolio(account = 'All') {
         ticker: trade.ticker,
         quantity: 0,
         costBasis: 0,
+        costValue: 0,
         marketValue: 0,
       }
-      entry.quantity += Number(trade.quantity) || 0
+      const quantity = Number(trade.quantity) || 0
+      entry.quantity += quantity
       entry.costBasis += Number(trade.cost_basis) || 0
+      // quantity * price, independent of the (often blank or inconsistently
+      // entered) cost_basis field — see avgCost below.
+      entry.costValue += quantity * (Number(trade.price) || 0)
       entry.marketValue += Number(trade.market_value) || 0
       byTicker.set(trade.ticker, entry)
     }
 
     return [...byTicker.values()]
-      .map((entry) => {
+      .map(({ costValue, ...entry }) => {
         const unrealizedPnl = entry.marketValue - entry.costBasis
         return {
           ...entry,
-          avgCost: entry.quantity > 0 ? entry.costBasis / entry.quantity : 0,
+          // Weighted average execution price, not cost_basis / quantity —
+          // cost_basis is a free-entry field that's frequently left blank or
+          // filled in with the per-share price instead of the lot total,
+          // which makes it an unreliable basis for "average cost per share".
+          avgCost: entry.quantity > 0 ? costValue / entry.quantity : 0,
           currentPrice: entry.quantity > 0 ? entry.marketValue / entry.quantity : 0,
           unrealizedPnl,
           unrealizedPct: entry.costBasis > 0 ? (unrealizedPnl / entry.costBasis) * 100 : 0,
