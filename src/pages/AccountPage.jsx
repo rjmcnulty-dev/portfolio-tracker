@@ -4,12 +4,13 @@ import { accountLabelFromSlug } from '../lib/accounts'
 import KPIRow from '../components/KPIRow'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
+import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
 
 export default function AccountPage() {
   const { accountSlug } = useParams()
   const accountLabel = accountLabelFromSlug(accountSlug)
-  const { trades, loading, error, kpis, allocation, pnlByTicker, deleteTrade } = usePortfolio(accountLabel)
+  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, deleteTrade } = usePortfolio(accountLabel)
 
   return (
     <div className="page">
@@ -30,6 +31,10 @@ export default function AccountPage() {
           </div>
           <section className="page__section">
             <h2>Holdings</h2>
+            <HoldingsSummaryTable holdings={holdings} />
+          </section>
+          <section className="page__section">
+            <h2>Trade Detail</h2>
             <HoldingsTable trades={trades} showAccount={false} onDelete={deleteTrade} />
           </section>
         </>

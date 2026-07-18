@@ -69,6 +69,39 @@ export function usePortfolio(account = 'All') {
     )
   }, [trades])
 
+  // Per-stock position summary. Only BUY rows count as "held" shares — same
+  // convention as the live-price overlay above, since this app doesn't do
+  // lot-matching between BUY/SELL rows for a given ticker.
+  const holdings = useMemo(() => {
+    const byTicker = new Map()
+    for (const trade of trades) {
+      if (trade.trade_type !== 'BUY') continue
+      const entry = byTicker.get(trade.ticker) || {
+        ticker: trade.ticker,
+        quantity: 0,
+        costBasis: 0,
+        marketValue: 0,
+      }
+      entry.quantity += Number(trade.quantity) || 0
+      entry.costBasis += Number(trade.cost_basis) || 0
+      entry.marketValue += Number(trade.market_value) || 0
+      byTicker.set(trade.ticker, entry)
+    }
+
+    return [...byTicker.values()]
+      .map((entry) => {
+        const unrealizedPnl = entry.marketValue - entry.costBasis
+        return {
+          ...entry,
+          avgCost: entry.quantity > 0 ? entry.costBasis / entry.quantity : 0,
+          currentPrice: entry.quantity > 0 ? entry.marketValue / entry.quantity : 0,
+          unrealizedPnl,
+          unrealizedPct: entry.costBasis > 0 ? (unrealizedPnl / entry.costBasis) * 100 : 0,
+        }
+      })
+      .sort((a, b) => b.marketValue - a.marketValue)
+  }, [trades])
+
   return {
     trades,
     loading,
@@ -76,6 +109,7 @@ export function usePortfolio(account = 'All') {
     kpis,
     allocation,
     pnlByTicker,
+    holdings,
     addTrade,
     updateTrade,
     deleteTrade,

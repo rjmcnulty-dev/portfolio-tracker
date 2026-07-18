@@ -1,0 +1,73 @@
+.holdings-summary-wrap {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow-x: auto;
+}
+
+.holdings-summary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.holdings-summary th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--navy-dark);
+  color: var(--text-on-dark);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.holdings-summary th.is-numeric {
+  text-align: right;
+}
+
+.holdings-summary td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf0f3;
+  color: var(--text-primary);
+}
+
+.holdings-summary td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.holdings-summary tbody tr:hover {
+  background: #f8f9fb;
+}
+
+.holdings-summary__ticker {
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.sort-arrow {
+  color: var(--gold);
+  font-size: 10px;
+}
+
+.is-positive {
+  color: var(--green);
+}
+
+.is-negative {
+  color: var(--red);
+}
+
+.holdings-summary__empty {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
