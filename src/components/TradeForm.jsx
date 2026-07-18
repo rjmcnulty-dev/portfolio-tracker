@@ -20,6 +20,11 @@ const EMPTY_TRADE = {
   notes: '',
 }
 
+function computeCostBasis(quantity, price, fees) {
+  const total = (Number(quantity) || 0) * (Number(price) || 0) + (Number(fees) || 0)
+  return total.toFixed(2)
+}
+
 export default function TradeForm({ trade, onClose, onSaved }) {
   const [form, setForm] = useState(() => (trade ? { ...trade } : { ...EMPTY_TRADE }))
   const [saving, setSaving] = useState(false)
@@ -27,6 +32,22 @@ export default function TradeForm({ trade, onClose, onSaved }) {
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // Cost Basis auto-recalculates from quantity/price/fees as they're edited,
+  // so the common case (basis = qty * price + fees) needs no manual entry.
+  // It stays a normal editable input for the rare case a real cost basis
+  // differs (e.g. a wash-sale-adjusted carryover).
+  function handleCostInputChange(field, value) {
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      next.cost_basis = computeCostBasis(next.quantity, next.price, next.fees)
+      return next
+    })
+  }
+
+  function handleRecalculateCostBasis() {
+    setForm((prev) => ({ ...prev, cost_basis: computeCostBasis(prev.quantity, prev.price, prev.fees) }))
   }
 
   async function handleSubmit(event) {
@@ -109,7 +130,7 @@ export default function TradeForm({ trade, onClose, onSaved }) {
                 step="any"
                 required
                 value={form.quantity}
-                onChange={(e) => handleChange('quantity', e.target.value)}
+                onChange={(e) => handleCostInputChange('quantity', e.target.value)}
               />
             </label>
             <label>
@@ -119,15 +140,25 @@ export default function TradeForm({ trade, onClose, onSaved }) {
                 step="any"
                 required
                 value={form.price}
-                onChange={(e) => handleChange('price', e.target.value)}
+                onChange={(e) => handleCostInputChange('price', e.target.value)}
               />
             </label>
             <label>
               Fees
-              <input type="number" step="any" value={form.fees} onChange={(e) => handleChange('fees', e.target.value)} />
+              <input
+                type="number"
+                step="any"
+                value={form.fees}
+                onChange={(e) => handleCostInputChange('fees', e.target.value)}
+              />
             </label>
             <label>
-              Cost Basis
+              <span className="trade-form__label-row">
+                Cost Basis
+                <button type="button" className="btn-link" onClick={handleRecalculateCostBasis}>
+                  Recalculate
+                </button>
+              </span>
               <input
                 type="number"
                 step="any"
