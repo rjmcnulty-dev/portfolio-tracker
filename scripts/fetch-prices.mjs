@@ -11,6 +11,43 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !TWELVE_DATA_API_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Twelve Data's free tier caps at 8 API credits/minute, and each symbol costs
+// 1 credit even inside a single batched request — so a portfolio with more
+// than 8 tickers has to be split across multiple per-minute windows.
+const MAX_SYMBOLS_PER_MINUTE = 8
+const RATE_LIMIT_WINDOW_MS = 61_000
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchQuotes(tickers) {
+  const quotes = {}
+
+  for (let i = 0; i < tickers.length; i += MAX_SYMBOLS_PER_MINUTE) {
+    const chunk = tickers.slice(i, i + MAX_SYMBOLS_PER_MINUTE)
+    const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(chunk.join(','))}&apikey=${TWELVE_DATA_API_KEY}`
+    const res = await fetch(url)
+    const body = await res.json()
+
+    if (body.status === 'error' || body.code) {
+      throw new Error(`Twelve Data error: ${body.message || JSON.stringify(body)}`)
+    }
+
+    // A single-symbol request returns { price: "..." } directly; a multi-symbol
+    // request returns { SYMBOL: { price: "..." }, ... }.
+    Object.assign(quotes, chunk.length === 1 ? { [chunk[0]]: body } : body)
+
+    const hasMoreChunks = i + MAX_SYMBOLS_PER_MINUTE < tickers.length
+    if (hasMoreChunks) {
+      console.log(`Fetched ${chunk.length} ticker(s), waiting for the next per-minute credit window…`)
+      await sleep(RATE_LIMIT_WINDOW_MS)
+    }
+  }
+
+  return quotes
+}
+
 async function main() {
   const { data: trades, error: tradesError } = await supabase.from('trades').select('ticker')
   if (tradesError) throw tradesError
@@ -21,17 +58,7 @@ async function main() {
     return
   }
 
-  const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(tickers.join(','))}&apikey=${TWELVE_DATA_API_KEY}`
-  const res = await fetch(url)
-  const body = await res.json()
-
-  if (body.status === 'error' || body.code) {
-    throw new Error(`Twelve Data error: ${body.message || JSON.stringify(body)}`)
-  }
-
-  // A single-symbol request returns { price: "..." } directly; a multi-symbol
-  // request returns { SYMBOL: { price: "..." }, ... }.
-  const quotes = tickers.length === 1 ? { [tickers[0]]: body } : body
+  const quotes = await fetchQuotes(tickers)
 
   const asOf = new Date().toISOString().slice(0, 10)
   const now = new Date().toISOString()
