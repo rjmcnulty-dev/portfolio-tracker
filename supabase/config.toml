@@ -9,3 +9,14 @@ entrypoint = "./functions/refresh-prices/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/refresh-prices/*.html" ]
+
+[functions.materialize-deposits]
+enabled = true
+verify_jwt = false
+import_map = "./functions/materialize-deposits/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/materialize-deposits/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/materialize-deposits/*.html" ]

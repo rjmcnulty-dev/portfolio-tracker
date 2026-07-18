@@ -4,7 +4,9 @@ A React + Vite portfolio tracker backed by Supabase. Tracks trades across three 
 (Robinhood, Traditional IRA, Roth IRA), aggregates KPIs and allocation/P&L charts, and
 includes tools for tax-bracket headroom and a 4-year Roth conversion plan. Current market
 prices refresh automatically once a day via a scheduled GitHub Actions job, or on demand
-from the Prices page, both pulling from Twelve Data.
+from the Prices page, both pulling from Twelve Data. Cash deposits (one-time or recurring,
+daily through monthly) are tracked per account, with recurring schedules auto-generating
+their deposit records on the same schedule/on-demand pattern as prices.
 
 ## Stack
 
@@ -58,8 +60,9 @@ from the Prices page, both pulling from Twelve Data.
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the four tables the app reads
-and writes: `trades`, `tax_settings`, `roth_conversions`, and `ticker_prices`.
+Run the following in the Supabase SQL editor. It creates the six tables the app reads
+and writes: `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
+`deposit_schedules`, and `deposits`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -136,6 +139,50 @@ create table if not exists ticker_prices (
 );
 
 -- ─────────────────────────────────────────────
+-- deposit_schedules: recurring deposit rules
+-- (e.g. "$500/month into Roth IRA"). Materialized
+-- into `deposits` by scripts/materialize-deposits.mjs
+-- (see "Recurring deposits" below).
+-- ─────────────────────────────────────────────
+create table if not exists deposit_schedules (
+  id uuid primary key default gen_random_uuid(),
+  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  amount numeric not null,
+  frequency text not null check (frequency in ('daily', 'weekly', 'biweekly', 'monthly')),
+  start_date date not null,
+  end_date date,
+  active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists deposit_schedules_account_idx on deposit_schedules (account);
+
+-- ─────────────────────────────────────────────
+-- deposits: the actual cash-deposit ledger. Rows
+-- with a schedule_id were auto-generated from a
+-- deposit_schedules row; NULL schedule_id means a
+-- manual one-time deposit.
+-- ─────────────────────────────────────────────
+create table if not exists deposits (
+  id uuid primary key default gen_random_uuid(),
+  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  amount numeric not null,
+  deposit_date date not null,
+  schedule_id uuid references deposit_schedules (id) on delete set null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists deposits_account_idx on deposits (account);
+create index if not exists deposits_schedule_idx on deposits (schedule_id);
+
+-- NULL schedule_id values are never considered equal to each other by a
+-- unique index, so manual (schedule_id = NULL) deposits are unaffected;
+-- this only dedupes auto-generated rows sharing the same schedule + date.
+create unique index if not exists deposits_schedule_date_uidx on deposits (schedule_id, deposit_date);
+
+-- ─────────────────────────────────────────────
 -- Row Level Security
 -- This app uses the anon key directly from the browser. For a
 -- single-user setup, enable RLS and allow all operations for now;
@@ -146,11 +193,15 @@ alter table trades enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
+alter table deposit_schedules enable row level security;
+alter table deposits enable row level security;
 
 create policy "Allow all on trades" on trades for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
+create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
+create policy "Allow all on deposits" on deposits for all using (true) with check (true);
 ```
 
 ## Daily price refresh
@@ -222,6 +273,49 @@ The function is called from the browser via `supabase.functions.invoke('refresh-
 ever reaches the client. Re-run `supabase functions deploy refresh-prices` any time
 `supabase/functions/refresh-prices/index.ts` changes.
 
+## Recurring deposits
+
+The Deposits page (`/deposits`) has two parts:
+
+- **Deposit History** — the actual `deposits` ledger. Add a one-time entry directly, or
+  let a recurring schedule generate them automatically (see below). The Source column
+  shows Manual vs. Recurring.
+- **Recurring Schedules** — rules in `deposit_schedules` (account, amount, frequency,
+  start/end date). A schedule doesn't create ledger rows by itself; something has to
+  *materialize* it.
+
+Materialization works exactly like price refreshing, same two paths:
+
+1. **Scheduled**: `scripts/materialize-deposits.mjs` runs daily via
+   `.github/workflows/materialize-deposits.yml` (06:00 UTC, every day — not just
+   weekdays, since deposits can be daily). For each active schedule, it walks forward
+   from `start_date` in `frequency`-sized steps (clamping monthly to the last day of
+   shorter months, e.g. a Jan 31 start lands on Feb 28) up through today, and inserts any
+   occurrence dates not already present. It's idempotent — an occurrence already in
+   `deposits` (matched on `schedule_id` + `deposit_date`) is silently skipped
+   (`upsert` with `ignoreDuplicates`), so re-running it, or having both the cron and a
+   manual sync fire close together, never creates duplicates.
+2. **On-demand**: the **Sync Now** button on the Deposits page calls the
+   `materialize-deposits` Edge Function (`supabase/functions/materialize-deposits`) — the
+   same logic, server-side, triggered immediately. Useful right after creating a schedule
+   with `start_date` set to today, so you don't have to wait for tomorrow's cron to see
+   the first deposit. Deploy/redeploy it the same way as `refresh-prices`:
+
+   ```bash
+   npx supabase functions deploy materialize-deposits
+   ```
+
+   (No extra secret needed — unlike price refresh, this function only reads/writes
+   Supabase, it doesn't call any third-party API.)
+
+To run the script locally:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_ANON_KEY=your_anon_key \
+npm run deposits:materialize
+```
+
 ## App structure
 
 ```
@@ -232,6 +326,8 @@ src/
   hooks/
     useTrades.js         # Fetch/add/update/delete trades, optionally filtered by account
     useTickerPrices.js    # Latest price per ticker; updatePrice() for manual edits, refreshAll() calls the Edge Function
+    useDeposits.js         # Fetch/add/update/delete deposits, optionally filtered by account
+    useDepositSchedules.js # CRUD for deposit_schedules; materializeNow() calls the Edge Function
     usePortfolio.js       # KPIs, allocation %, and P&L-by-ticker; overlays live prices onto open lots
   components/
     Layout.jsx            # Sidebar nav + main content outlet
@@ -243,17 +339,24 @@ src/
     TaxHeadroom.jsx        # Headroom calculator, reads/writes tax_settings
     RothProgress.jsx       # 4-year conversion progress from roth_conversions
     TickerPrices.jsx       # Per-ticker price table: inline "Update Price" edits + "Update All Prices" button
+    DepositForm.jsx        # Add/edit one-time deposit modal
+    DepositScheduleForm.jsx # Add/edit recurring deposit schedule modal
+    DepositsTable.jsx      # Deposit ledger table (Manual vs Recurring source badge)
+    DepositSchedulesTable.jsx # Recurring schedules table (active/paused status)
   pages/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
     TradesPage.jsx          # Full trade log with add/edit/filter
     PricesPage.jsx          # Manual price overrides (/prices)
+    DepositsPage.jsx        # Deposit ledger + recurring schedules (/deposits)
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
+  materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
 supabase/
   functions/
-    refresh-prices/          # On-demand version of the same job, called by "Update All Prices" (see "On-demand price refresh")
+    refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
+    materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
 ```
 
 ## Deployment
@@ -263,4 +366,5 @@ to GitHub Pages on every push to `main`. In your repo settings, set **Settings �
 Source** to **GitHub Actions**. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as
 repository secrets (Settings → Secrets and variables → Actions) so the build step can
 inject them. Add `TWELVE_DATA_API_KEY` as well so `.github/workflows/refresh-prices.yml`
-can run (see "Daily price refresh" above).
+can run (see "Daily price refresh" above). `.github/workflows/materialize-deposits.yml`
+needs no extra secret beyond the two Supabase ones.

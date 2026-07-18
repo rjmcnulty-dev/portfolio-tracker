@@ -100,7 +100,7 @@ export default function TickerPrices() {
         </button>
       </div>
       {refreshError && <p className="ticker-prices__error">{refreshError}</p>}
-      {refreshMessage && !refreshError && <p className="ticker-prices__message">{refreshMessage}</p>}
+      {refreshMessage && !refreshError && <p className="ticker-prices__message success-message">{refreshMessage}</p>}
       <table className="ticker-prices">
         <thead>
           <tr>

@@ -30,6 +30,9 @@ export default function Layout() {
           <NavLink to="/prices" className={linkClass}>
             Prices
           </NavLink>
+          <NavLink to="/deposits" className={linkClass}>
+            Deposits
+          </NavLink>
           <NavLink to="/tax" className={linkClass}>
             Tax &amp; Roth
           </NavLink>

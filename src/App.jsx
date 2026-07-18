@@ -5,6 +5,7 @@ import AccountPage from './pages/AccountPage'
 import TaxPage from './pages/TaxPage'
 import TradesPage from './pages/TradesPage'
 import PricesPage from './pages/PricesPage'
+import DepositsPage from './pages/DepositsPage'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="account/:accountSlug" element={<AccountPage />} />
           <Route path="trades" element={<TradesPage />} />
           <Route path="prices" element={<PricesPage />} />
+          <Route path="deposits" element={<DepositsPage />} />
           <Route path="tax" element={<TaxPage />} />
         </Route>
       </Routes>

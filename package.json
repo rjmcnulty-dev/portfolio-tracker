@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "prices:fetch": "node scripts/fetch-prices.mjs"
+    "prices:fetch": "node scripts/fetch-prices.mjs",
+    "deposits:materialize": "node scripts/materialize-deposits.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",
