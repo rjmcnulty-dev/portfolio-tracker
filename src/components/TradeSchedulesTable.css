@@ -1,18 +1,18 @@
-.holdings-table-wrap {
+.trade-schedules-wrap {
   background: #fff;
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
   overflow-x: auto;
 }
 
-.holdings-table {
+.trade-schedules {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   white-space: nowrap;
 }
 
-.holdings-table th {
+.trade-schedules th {
   text-align: left;
   padding: 10px 14px;
   background: var(--navy-dark);
@@ -21,65 +21,30 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  cursor: pointer;
-  user-select: none;
-  position: sticky;
-  top: 0;
 }
 
-.holdings-table th.is-numeric {
+.trade-schedules th.is-numeric {
   text-align: right;
 }
 
-.holdings-table td {
+.trade-schedules td {
   padding: 10px 14px;
   border-bottom: 1px solid #edf0f3;
   color: var(--text-primary);
 }
 
-.holdings-table td.is-numeric {
+.trade-schedules td.is-numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.holdings-table tbody tr:hover {
+.trade-schedules tbody tr:hover {
   background: #f8f9fb;
 }
 
-.sort-arrow {
-  color: var(--gold);
-  font-size: 10px;
-}
-
-.is-positive {
-  color: var(--green);
-}
-
-.is-negative {
-  color: var(--red);
-}
-
-.wash-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+.trade-schedules__ticker {
   font-weight: 600;
-}
-
-.wash-badge--ok {
-  background: rgba(27, 175, 122, 0.12);
-  color: var(--green);
-}
-
-.wash-badge--review {
-  background: rgba(240, 165, 0, 0.15);
-  color: #a06a00;
-}
-
-.wash-badge--flagged {
-  background: rgba(227, 73, 72, 0.14);
-  color: var(--red);
+  color: var(--navy-dark);
 }
 
 .source-badge {
@@ -104,7 +69,7 @@
   white-space: nowrap;
 }
 
-.holdings-table__empty {
+.trade-schedules__empty {
   background: #fff;
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);

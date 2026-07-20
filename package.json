@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "prices:fetch": "node scripts/fetch-prices.mjs",
-    "deposits:materialize": "node scripts/materialize-deposits.mjs"
+    "deposits:materialize": "node scripts/materialize-deposits.mjs",
+    "trades:materialize": "node scripts/materialize-trades.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",

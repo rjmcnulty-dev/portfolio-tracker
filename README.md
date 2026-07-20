@@ -4,9 +4,11 @@ A React + Vite portfolio tracker backed by Supabase. Tracks trades across three 
 (Robinhood, Traditional IRA, Roth IRA), aggregates KPIs and allocation/P&L charts, and
 includes tools for tax-bracket headroom and a 4-year Roth conversion plan. Current market
 prices refresh automatically once a day via a scheduled GitHub Actions job, or on demand
-from the Prices page, both pulling from Twelve Data. Cash deposits (one-time or recurring,
-daily through monthly) are tracked per account, with recurring schedules auto-generating
-their deposit records on the same schedule/on-demand pattern as prices.
+from the Prices page, both pulling from Twelve Data. Cash deposits and dollar-cost-average
+trades (one-time or recurring, daily through monthly) are tracked per account, with
+recurring schedules auto-generating their ledger records on the same
+scheduled-job/on-demand pattern as prices. Each account's uninvested cash position is
+computed live from deposits and trade cash flow.
 
 ## Stack
 
@@ -60,9 +62,9 @@ their deposit records on the same schedule/on-demand pattern as prices.
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the six tables the app reads
+Run the following in the Supabase SQL editor. It creates the seven tables the app reads
 and writes: `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
-`deposit_schedules`, and `deposits`.
+`deposit_schedules`, `deposits`, and `trade_schedules`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -183,6 +185,38 @@ create index if not exists deposits_schedule_idx on deposits (schedule_id);
 create unique index if not exists deposits_schedule_date_uidx on deposits (schedule_id, deposit_date);
 
 -- ─────────────────────────────────────────────
+-- trade_schedules: recurring trade rules (e.g.
+-- "$200/month into AAPL"). Materialized into
+-- `trades` by scripts/materialize-trades.mjs.
+-- Purchase price/quantity are computed at
+-- materialization time from ticker_prices, not
+-- fixed at schedule-creation time. See "Recurring
+-- trades" below.
+-- ─────────────────────────────────────────────
+create table if not exists trade_schedules (
+  id uuid primary key default gen_random_uuid(),
+  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  ticker text not null,
+  dollar_amount numeric not null,
+  frequency text not null check (frequency in ('daily', 'weekly', 'biweekly', 'monthly')),
+  start_date date not null,
+  end_date date,
+  active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists trade_schedules_account_idx on trade_schedules (account);
+
+-- Link auto-generated trades back to the schedule that created them.
+alter table trades add column if not exists schedule_id uuid references trade_schedules (id) on delete set null;
+
+create index if not exists trades_schedule_idx on trades (schedule_id);
+
+-- Same NULL-safe dedup logic as deposits_schedule_date_uidx above.
+create unique index if not exists trades_schedule_date_uidx on trades (schedule_id, trade_date);
+
+-- ─────────────────────────────────────────────
 -- Row Level Security
 -- This app uses the anon key directly from the browser. For a
 -- single-user setup, enable RLS and allow all operations for now;
@@ -195,6 +229,7 @@ alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
 alter table deposit_schedules enable row level security;
 alter table deposits enable row level security;
+alter table trade_schedules enable row level security;
 
 create policy "Allow all on trades" on trades for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
@@ -202,6 +237,7 @@ create policy "Allow all on roth_conversions" on roth_conversions for all using 
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
 create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
 create policy "Allow all on deposits" on deposits for all using (true) with check (true);
+create policy "Allow all on trade_schedules" on trade_schedules for all using (true) with check (true);
 ```
 
 ## Daily price refresh
@@ -316,6 +352,65 @@ SUPABASE_ANON_KEY=your_anon_key \
 npm run deposits:materialize
 ```
 
+## Recurring trades
+
+Same shape as recurring deposits, on the Trade Log page (`/trades`) instead: a
+**Recurring Trades** section (rules in `trade_schedules`) sits above the full trade
+history. Each schedule is a fixed **dollar amount** per occurrence (e.g. "$200/month into
+AAPL"), not a fixed share count — a classic dollar-cost-average setup.
+
+The key difference from deposits: a trade needs a *price*. At materialization time (not
+schedule-creation time), the job looks up the ticker's current price from `ticker_prices`
+and computes `quantity = dollar_amount / price`, then inserts a `trades` row (`BUY`,
+`schedule_id` set, `cost_basis` = the fixed dollar amount). If there's no cached price yet
+for that ticker, that schedule is skipped for the run and picked up automatically next
+time a price exists — it never blocks other schedules or errors out the whole batch.
+
+Same two materialization paths as prices/deposits:
+
+1. **Scheduled**: `scripts/materialize-trades.mjs` runs weekdays at 21:30 UTC via
+   `.github/workflows/materialize-trades.yml` — 30 minutes after `refresh-prices.yml`
+   (21:00 UTC), so trades use same-day closing prices. Weekdays only (unlike deposits'
+   daily schedule) since there's no meaningful "trading day" price on weekends. The same
+   occurrence-walking and idempotent upsert logic as deposits applies.
+2. **On-demand**: the **Sync Now** button next to Recurring Trades calls the
+   `materialize-trades` Edge Function (`supabase/functions/materialize-trades`). Deploy it
+   the same way:
+
+   ```bash
+   npx supabase functions deploy materialize-trades
+   ```
+
+   No secret needed — it only reads `ticker_prices` (already populated by the price-refresh
+   job) and writes `trades`, no third-party API call of its own.
+
+To run the script locally:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_ANON_KEY=your_anon_key \
+npm run trades:materialize
+```
+
+Auto-generated trades are marked with a Source badge (Recurring vs. Manual) on the Trade
+Log table, same as deposits.
+
+## Cash position
+
+The **Cash Position** KPI (Dashboard and each account page) isn't stored anywhere — it's
+computed live in `usePortfolio` from the same `trades` and `deposits` data everything else
+uses:
+
+```
+cash position = Σ deposits.amount
+              − Σ (BUY trades: cost_basis)
+              + Σ (SELL trades: quantity × price − fees)
+```
+
+Deposits add cash; a BUY draws it down by that lot's cost basis; a SELL adds back its
+proceeds. It's not clamped at zero — a negative cash position is a real signal (trades
+recorded without a matching deposit), shown in red rather than hidden.
+
 ## App structure
 
 ```
@@ -328,14 +423,18 @@ src/
     useTickerPrices.js    # Latest price per ticker; updatePrice() for manual edits, refreshAll() calls the Edge Function
     useDeposits.js         # Fetch/add/update/delete deposits, optionally filtered by account
     useDepositSchedules.js # CRUD for deposit_schedules; materializeNow() calls the Edge Function
-    usePortfolio.js       # KPIs, allocation %, and P&L-by-ticker; overlays live prices onto open lots
+    useTradeSchedules.js   # CRUD for trade_schedules; materializeNow() calls the Edge Function
+    usePortfolio.js       # KPIs, allocation %, P&L-by-ticker, holdings, and cash position; overlays live prices onto open lots
   components/
     Layout.jsx            # Sidebar nav + main content outlet
-    KPIRow.jsx             # 5 stat cards (invested, mkt value, unrealized, realized, total P&L)
+    KPIRow.jsx             # 6 stat cards (cash position, invested, mkt value, unrealized, realized, total P&L)
     AllocationDonut.jsx    # Recharts PieChart, market value % by ticker
     PnLBarChart.jsx        # Recharts horizontal BarChart, realized vs unrealized by ticker
-    HoldingsTable.jsx      # Sortable table, all trade columns, account badge in All view
-    TradeForm.jsx          # Add/edit trade modal, writes directly to Supabase
+    HoldingsSummaryTable.jsx # Per-stock position summary: qty, avg cost, current price, unrealized $/%
+    HoldingsTable.jsx      # Sortable table, all trade columns, account badge + Source badge in All view
+    TradeForm.jsx          # Add/edit trade modal; Cost Basis auto-calculates from qty * price + fees
+    TradeScheduleForm.jsx  # Add/edit recurring trade schedule modal (dollar amount, not share count)
+    TradeSchedulesTable.jsx # Recurring trade schedules table (active/paused status)
     TaxHeadroom.jsx        # Headroom calculator, reads/writes tax_settings
     RothProgress.jsx       # 4-year conversion progress from roth_conversions
     TickerPrices.jsx       # Per-ticker price table: inline "Update Price" edits + "Update All Prices" button
@@ -347,16 +446,18 @@ src/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
-    TradesPage.jsx          # Full trade log with add/edit/filter
+    TradesPage.jsx          # Recurring trade schedules + full trade log with add/edit/filter
     PricesPage.jsx          # Manual price overrides (/prices)
     DepositsPage.jsx        # Deposit ledger + recurring schedules (/deposits)
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
+  materialize-trades.mjs    # Weekday job: trade_schedules + ticker_prices -> trades (see "Recurring trades")
 supabase/
   functions/
     refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
     materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
+    materialize-trades/      # On-demand version of materialize-trades.mjs, called by "Sync Now"
 ```
 
 ## Deployment
@@ -366,5 +467,6 @@ to GitHub Pages on every push to `main`. In your repo settings, set **Settings �
 Source** to **GitHub Actions**. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as
 repository secrets (Settings → Secrets and variables → Actions) so the build step can
 inject them. Add `TWELVE_DATA_API_KEY` as well so `.github/workflows/refresh-prices.yml`
-can run (see "Daily price refresh" above). `.github/workflows/materialize-deposits.yml`
-needs no extra secret beyond the two Supabase ones.
+can run (see "Daily price refresh" above). `.github/workflows/materialize-deposits.yml` and
+`.github/workflows/materialize-trades.yml` need no extra secret beyond the two Supabase
+ones.

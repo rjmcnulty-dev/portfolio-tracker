@@ -14,6 +14,7 @@ const COLUMNS = [
   { key: 'realized_pnl', label: 'Realized', numeric: true, currency: true, pnl: true },
   { key: 'unrealized_pnl', label: 'Unrealized', numeric: true, currency: true, pnl: true },
   { key: 'wash_sale_risk', label: 'Wash Sale' },
+  { key: 'source', label: 'Source' },
   { key: 'notes', label: 'Notes' },
 ]
 
@@ -29,6 +30,10 @@ function washSaleClass(risk) {
   return 'wash-badge wash-badge--ok'
 }
 
+function sourceValue(trade) {
+  return trade.schedule_id ? 'Recurring' : 'Manual'
+}
+
 export default function HoldingsTable({ trades, showAccount = true, onEdit, onDelete }) {
   const [sortKey, setSortKey] = useState('trade_date')
   const [sortDir, setSortDir] = useState('desc')
@@ -38,8 +43,8 @@ export default function HoldingsTable({ trades, showAccount = true, onEdit, onDe
   const sorted = useMemo(() => {
     const rows = [...trades]
     rows.sort((a, b) => {
-      const aVal = a[sortKey]
-      const bVal = b[sortKey]
+      const aVal = sortKey === 'source' ? sourceValue(a) : a[sortKey]
+      const bVal = sortKey === 'source' ? sourceValue(b) : b[sortKey]
       if (aVal == null) return 1
       if (bVal == null) return -1
       if (typeof aVal === 'number' || typeof bVal === 'number') {
@@ -94,6 +99,16 @@ export default function HoldingsTable({ trades, showAccount = true, onEdit, onDe
                   return (
                     <td key={col.key}>
                       <span className="account-badge">{trade.account}</span>
+                    </td>
+                  )
+                }
+                if (col.key === 'source') {
+                  const isRecurring = Boolean(trade.schedule_id)
+                  return (
+                    <td key={col.key}>
+                      <span className={`source-badge ${isRecurring ? 'source-badge--recurring' : 'source-badge--manual'}`}>
+                        {isRecurring ? 'Recurring' : 'Manual'}
+                      </span>
                     </td>
                   )
                 }

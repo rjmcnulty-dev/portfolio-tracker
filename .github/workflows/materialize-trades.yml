@@ -1,0 +1,31 @@
+name: Materialize Recurring Trades
+
+on:
+  schedule:
+    # 21:30 UTC, weekdays — 30 min after refresh-prices.yml (21:00 UTC) so
+    # trades use same-day closing prices. Unlike deposits, recurring trades
+    # need a market price, so this only runs on trading days.
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Materialize due recurring trades
+        run: node scripts/materialize-trades.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

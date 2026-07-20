@@ -27,6 +27,12 @@
   font-weight: 600;
 }
 
+.trade-form__hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0;
+}
+
 .trade-form__error {
   color: var(--red);
   font-size: 13px;
