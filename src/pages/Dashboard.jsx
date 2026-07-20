@@ -6,7 +6,8 @@ import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
 
 export default function Dashboard() {
-  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, deleteTrade } = usePortfolio('All')
+  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
+    usePortfolio('All')
 
   return (
     <div className="page">
@@ -20,7 +21,7 @@ export default function Dashboard() {
         <p className="page__loading">Loading portfolio…</p>
       ) : (
         <>
-          <KPIRow kpis={kpis} />
+          <KPIRow kpis={kpis} cashPosition={cashPosition} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

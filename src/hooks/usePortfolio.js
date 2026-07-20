@@ -1,10 +1,23 @@
 import { useMemo } from 'react'
 import { useTrades } from './useTrades'
 import { useTickerPrices } from './useTickerPrices'
+import { useDeposits } from './useDeposits'
 
 export function usePortfolio(account = 'All') {
-  const { trades: rawTrades, loading, error, addTrade, updateTrade, deleteTrade, refetch } = useTrades(account)
+  const {
+    trades: rawTrades,
+    loading: tradesLoading,
+    error: tradesError,
+    addTrade,
+    updateTrade,
+    deleteTrade,
+    refetch,
+  } = useTrades(account)
   const { prices: livePrices } = useTickerPrices()
+  const { deposits, loading: depositsLoading, error: depositsError } = useDeposits(account)
+
+  const loading = tradesLoading || depositsLoading
+  const error = tradesError || depositsError
 
   // Live prices only overlay open (BUY) lots — a closed SELL lot's realized
   // P&L shouldn't be recomputed as if it still carried market exposure.
@@ -39,6 +52,26 @@ export function usePortfolio(account = 'All') {
     () => ({ ...totals, totalPnl: totals.realizedPnl + totals.unrealizedPnl }),
     [totals],
   )
+
+  // Uninvested cash: deposits add, BUYs draw down by their cost, SELLs add
+  // back their proceeds. Uses cost_basis for BUYs (reliable now that the
+  // trade form auto-calculates it as qty * price + fees) and qty * price -
+  // fees for SELL proceeds, independent of that row's own cost_basis (which
+  // represents the basis of the shares sold, not cash received). Can go
+  // negative if trades outspent recorded deposits — that's a real signal
+  // (missing a deposit entry), not clamped away.
+  const cashPosition = useMemo(() => {
+    const totalDeposits = deposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+    const netTradeCash = trades.reduce((sum, trade) => {
+      const quantity = Number(trade.quantity) || 0
+      const price = Number(trade.price) || 0
+      const fees = Number(trade.fees) || 0
+      if (trade.trade_type === 'BUY') return sum - (Number(trade.cost_basis) || 0)
+      if (trade.trade_type === 'SELL') return sum + (quantity * price - fees)
+      return sum
+    }, 0)
+    return totalDeposits + netTradeCash
+  }, [deposits, trades])
 
   const allocation = useMemo(() => {
     const byTicker = new Map()
@@ -119,6 +152,7 @@ export function usePortfolio(account = 'All') {
     allocation,
     pnlByTicker,
     holdings,
+    cashPosition,
     addTrade,
     updateTrade,
     deleteTrade,

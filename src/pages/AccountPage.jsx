@@ -10,7 +10,8 @@ import HoldingsTable from '../components/HoldingsTable'
 export default function AccountPage() {
   const { accountSlug } = useParams()
   const accountLabel = accountLabelFromSlug(accountSlug)
-  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, deleteTrade } = usePortfolio(accountLabel)
+  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
+    usePortfolio(accountLabel)
 
   return (
     <div className="page">
@@ -24,7 +25,7 @@ export default function AccountPage() {
         <p className="page__loading">Loading portfolio…</p>
       ) : (
         <>
-          <KPIRow kpis={kpis} />
+          <KPIRow kpis={kpis} cashPosition={cashPosition} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

@@ -12,13 +12,20 @@ function pnlClass(value) {
   return ''
 }
 
-export default function KPIRow({ kpis }) {
+// Cash isn't a gain/loss figure, so only flag it when negative (spent more
+// than recorded deposits cover) rather than coloring positive balances green.
+function warnIfNegativeClass(value) {
+  return value < 0 ? 'kpi-card__value--negative' : ''
+}
+
+export default function KPIRow({ kpis, cashPosition }) {
   const cards = [
+    { label: 'Cash Position', value: cashPosition, colorClass: warnIfNegativeClass(cashPosition) },
     { label: 'Invested', value: kpis.invested },
     { label: 'Market Value', value: kpis.marketValue },
-    { label: 'Unrealized P&L', value: kpis.unrealizedPnl, signed: true },
-    { label: 'Realized P&L', value: kpis.realizedPnl, signed: true },
-    { label: 'Total P&L', value: kpis.totalPnl, signed: true },
+    { label: 'Unrealized P&L', value: kpis.unrealizedPnl, colorClass: pnlClass(kpis.unrealizedPnl) },
+    { label: 'Realized P&L', value: kpis.realizedPnl, colorClass: pnlClass(kpis.realizedPnl) },
+    { label: 'Total P&L', value: kpis.totalPnl, colorClass: pnlClass(kpis.totalPnl) },
   ]
 
   return (
@@ -26,9 +33,7 @@ export default function KPIRow({ kpis }) {
       {cards.map((card) => (
         <div className="kpi-card" key={card.label}>
           <span className="kpi-card__label">{card.label}</span>
-          <span className={`kpi-card__value ${card.signed ? pnlClass(card.value) : ''}`}>
-            {formatCurrency(card.value)}
-          </span>
+          <span className={`kpi-card__value ${card.colorClass ?? ''}`}>{formatCurrency(card.value)}</span>
         </div>
       ))}
     </div>
