@@ -309,6 +309,19 @@ The function is called from the browser via `supabase.functions.invoke('refresh-
 ever reaches the client. Re-run `supabase functions deploy refresh-prices` any time
 `supabase/functions/refresh-prices/index.ts` changes.
 
+Each row on the Prices page also has its own **Auto Update** button, which POSTs
+`{ ticker }` to the same function — `refreshOne` in `useTickerPrices` — instead of
+refreshing every held ticker. A single symbol is always one Twelve Data credit and never
+needs to wait out the per-minute chunking delay, so it responds in under a second instead
+of the 60s+ a full "Update All Prices" run takes once you're past 8 tickers.
+
+One thing to know: Auto Update and Update All Prices draw from the *same* Twelve Data
+per-minute credit budget (8 free-tier credits/minute), because that cap is tracked by
+Twelve Data per API key, not per request. Firing off several Auto Updates in quick
+succession, or an Auto Update immediately followed by a full refresh, can still trip
+"You have run out of API credits for the current minute" — the error surfaces cleanly in
+the UI either way, just wait a few seconds and retry.
+
 ## Recurring deposits
 
 The Deposits page (`/deposits`) has two parts:

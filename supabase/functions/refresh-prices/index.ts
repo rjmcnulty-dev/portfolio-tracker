@@ -78,12 +78,27 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  const { data: trades, error: tradesError } = await supabase.from("trades").select("ticker");
-  if (tradesError) {
-    return json({ error: tradesError.message }, 500);
+  // Optional { ticker: "AAPL" } body targets a single symbol — used by the
+  // per-row "Auto Update" button — instead of refreshing every held ticker.
+  let requestedTicker: string | null = null;
+  try {
+    const body = await req.json();
+    if (body?.ticker) requestedTicker = String(body.ticker).trim().toUpperCase();
+  } catch {
+    // No body (or invalid JSON) — fall through to refreshing everything.
   }
 
-  const tickers = [...new Set((trades ?? []).map((t) => t.ticker).filter(Boolean))];
+  let tickers: string[];
+  if (requestedTicker) {
+    tickers = [requestedTicker];
+  } else {
+    const { data: trades, error: tradesError } = await supabase.from("trades").select("ticker");
+    if (tradesError) {
+      return json({ error: tradesError.message }, 500);
+    }
+    tickers = [...new Set((trades ?? []).map((t) => t.ticker).filter(Boolean))];
+  }
+
   if (!tickers.length) {
     return json({ message: "No tickers found in trades — nothing to fetch.", updated: [] });
   }

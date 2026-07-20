@@ -52,5 +52,16 @@ export function useTickerPrices() {
     return data
   }, [fetchPrices])
 
-  return { prices, loading, error, updatePrice, refreshAll, refetch: fetchPrices }
+  const refreshOne = useCallback(
+    async (ticker) => {
+      const { data, error: invokeError } = await supabase.functions.invoke('refresh-prices', { body: { ticker } })
+      if (invokeError) throw invokeError
+      if (data?.error) throw new Error(data.error)
+      await fetchPrices()
+      return data
+    },
+    [fetchPrices],
+  )
+
+  return { prices, loading, error, updatePrice, refreshAll, refreshOne, refetch: fetchPrices }
 }

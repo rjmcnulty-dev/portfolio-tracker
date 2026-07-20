@@ -19,7 +19,7 @@ function formatTimestamp(iso) {
 
 export default function TickerPrices() {
   const { trades, loading: tradesLoading } = useTrades('All')
-  const { prices, loading: pricesLoading, error, updatePrice, refreshAll } = useTickerPrices()
+  const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
 
   const [editingTicker, setEditingTicker] = useState(null)
   const [draftPrice, setDraftPrice] = useState('')
@@ -28,6 +28,8 @@ export default function TickerPrices() {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState(null)
   const [refreshMessage, setRefreshMessage] = useState(null)
+  const [autoUpdatingTicker, setAutoUpdatingTicker] = useState(null)
+  const [autoUpdateError, setAutoUpdateError] = useState(null)
 
   const tickers = useMemo(
     () => [...new Set(trades.map((t) => t.ticker).filter(Boolean))].sort(),
@@ -53,6 +55,18 @@ export default function TickerPrices() {
       setRefreshError(err.message)
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function handleAutoUpdate(ticker) {
+    setAutoUpdatingTicker(ticker)
+    setAutoUpdateError(null)
+    try {
+      await refreshOne(ticker)
+    } catch (err) {
+      setAutoUpdateError(`${ticker}: ${err.message}`)
+    } finally {
+      setAutoUpdatingTicker(null)
     }
   }
 
@@ -142,9 +156,18 @@ export default function TickerPrices() {
                       </button>
                     </>
                   ) : (
-                    <button className="btn-link" onClick={() => startEdit(ticker)}>
-                      Update Price
-                    </button>
+                    <>
+                      <button
+                        className="btn-link"
+                        disabled={autoUpdatingTicker === ticker}
+                        onClick={() => handleAutoUpdate(ticker)}
+                      >
+                        {autoUpdatingTicker === ticker ? 'Updating…' : 'Auto Update'}
+                      </button>
+                      <button className="btn-link" onClick={() => startEdit(ticker)}>
+                        Update Price
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>
@@ -153,6 +176,7 @@ export default function TickerPrices() {
         </tbody>
       </table>
       {saveError && <p className="ticker-prices__error">{saveError}</p>}
+      {autoUpdateError && <p className="ticker-prices__error">{autoUpdateError}</p>}
     </div>
   )
 }
