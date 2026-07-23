@@ -1,0 +1,107 @@
+.watchlist-card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.watchlist-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.watchlist-card__ticker {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy-dark);
+  margin-right: 10px;
+}
+
+.watchlist-card__price {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.watchlist-card__ranges {
+  display: flex;
+  gap: 6px;
+}
+
+.range-btn {
+  border: 1px solid #d3d9e0;
+  background: #fff;
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.range-btn:hover {
+  background: var(--surface);
+}
+
+.range-btn--active {
+  background: var(--navy-mid);
+  border-color: var(--navy-mid);
+  color: #fff;
+}
+
+.watchlist-card__loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+.watchlist-card__earnings {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.watchlist-card__earnings-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.watchlist-card__earnings-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.watchlist-card__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watchlist-card__notes textarea {
+  min-height: 70px;
+}
+
+.watchlist-card__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0;
+}
+
+.is-positive {
+  color: var(--green);
+}
+
+.is-negative {
+  color: var(--red);
+}

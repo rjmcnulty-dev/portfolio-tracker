@@ -8,17 +8,20 @@ from the Prices page, both pulling from Twelve Data. Cash deposits and dollar-co
 trades (one-time or recurring, daily through monthly) are tracked per account, with
 recurring schedules auto-generating their ledger records on the same
 scheduled-job/on-demand pattern as prices. Each account's uninvested cash position is
-computed live from deposits and trade cash flow.
+computed live from deposits and trade cash flow. A separate Stock Watch page tracks
+tickers you don't hold — price chart (1D through 1Y), next earnings date, and notes.
 
 ## Stack
 
 - React 18 + Vite
 - [@supabase/supabase-js](https://github.com/supabase/supabase-js) for data
-- [Recharts](https://recharts.org/) for the allocation donut and P&L bar chart
+- [Recharts](https://recharts.org/) for the allocation donut, P&L bar chart, and Stock
+  Watch price charts
 - React Router (`HashRouter`) for navigation
 - Plain CSS (no framework), dark-navy financial theme
-- [Twelve Data](https://twelvedata.com/) for daily stock prices, fetched by a scheduled
-  GitHub Actions workflow and by a Supabase Edge Function (on-demand refresh)
+- [Twelve Data](https://twelvedata.com/) for stock prices (daily refresh + on-demand) and
+  Stock Watch price history
+- [Finnhub](https://finnhub.io/) for Stock Watch's next-earnings-date lookup
 
 ## Setup
 
@@ -62,9 +65,9 @@ computed live from deposits and trade cash flow.
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the seven tables the app reads
+Run the following in the Supabase SQL editor. It creates the eight tables the app reads
 and writes: `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
-`deposit_schedules`, `deposits`, and `trade_schedules`.
+`deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -217,6 +220,20 @@ create index if not exists trades_schedule_idx on trades (schedule_id);
 create unique index if not exists trades_schedule_date_uidx on trades (schedule_id, trade_date);
 
 -- ─────────────────────────────────────────────
+-- watchlist: tickers you're tracking but don't
+-- necessarily hold — Stock Watch page (/watch).
+-- Chart data and next-earnings-date aren't stored
+-- here; they're fetched live via the
+-- watchlist-quote Edge Function on each view.
+-- ─────────────────────────────────────────────
+create table if not exists watchlist (
+  id uuid primary key default gen_random_uuid(),
+  ticker text not null unique,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+-- ─────────────────────────────────────────────
 -- Row Level Security
 -- This app uses the anon key directly from the browser. For a
 -- single-user setup, enable RLS and allow all operations for now;
@@ -230,6 +247,7 @@ alter table ticker_prices enable row level security;
 alter table deposit_schedules enable row level security;
 alter table deposits enable row level security;
 alter table trade_schedules enable row level security;
+alter table watchlist enable row level security;
 
 create policy "Allow all on trades" on trades for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
@@ -238,6 +256,7 @@ create policy "Allow all on ticker_prices" on ticker_prices for all using (true)
 create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
 create policy "Allow all on deposits" on deposits for all using (true) with check (true);
 create policy "Allow all on trade_schedules" on trade_schedules for all using (true) with check (true);
+create policy "Allow all on watchlist" on watchlist for all using (true) with check (true);
 ```
 
 ## Daily price refresh
@@ -424,6 +443,49 @@ Deposits add cash; a BUY draws it down by that lot's cost basis; a SELL adds bac
 proceeds. It's not clamped at zero — a negative cash position is a real signal (trades
 recorded without a matching deposit), shown in red rather than hidden.
 
+## Stock Watch
+
+The Stock Watch page (`/watch`) tracks tickers independent of whether you actually hold
+them — add any symbol, and each gets a card with a price chart, a range toggle (1D / 1W /
+1M / 3M / 6M / 1Y), the next earnings date, and a free-text Notes field.
+
+Unlike prices/deposits/trades, nothing here is cached in Supabase or refreshed on a
+schedule — `watchlist` only stores the ticker and your notes. Chart data and the earnings
+date are fetched live, on demand, whenever a card mounts or you switch its range, via a
+single Edge Function: `supabase/functions/watchlist-quote`, called with `{ ticker, range }`
+through `useStockQuote`.
+
+That function combines two providers:
+
+- **Twelve Data** `time_series` for the chart. Range maps to interval/outputsize: `1D` →
+  5min bars, `1W` → 30min bars, `1M`/`3M`/`6M`/`1Y` → daily bars over 30/90/180/365 days.
+- **Finnhub** `calendar/earnings` for the next earnings date — this needed a second
+  provider because Twelve Data's forward-looking earnings calendar is a paid-plan feature;
+  its free `/earnings` endpoint only returns *past* reports. Finnhub's free tier has a real,
+  documented earnings-calendar endpoint, so that's used instead of scraping a finance
+  site's HTML (fragile, likely against its ToS) or estimating from historical cadence.
+
+Deploy/redeploy the same way as the other functions:
+
+```bash
+npx supabase secrets set FINNHUB_API_KEY=your_finnhub_key
+npx supabase functions deploy watchlist-quote
+```
+
+**Rate limit note**: unlike `/price`, Twelve Data's `time_series` costs a credit per
+`(ticker, range)` combination with no batching discount, against the same free-tier 8
+credits/minute cap used elsewhere in this app. `useStockQuote` caches each combination for
+the card's lifetime — reselecting a range you've already viewed is free — and dedupes
+React StrictMode's dev-mode double effect-fire (which otherwise silently doubled every
+initial chart load in `npm run dev`, though not in the production build). Watching more
+than ~8 (ticker, range) combinations within the same minute — e.g. several new tickers, or
+clicking through multiple ranges quickly — can still trip Twelve Data's cap; the error
+surfaces cleanly in the card, wait a few seconds and retry.
+
+Get a free Finnhub key at [finnhub.io/register](https://finnhub.io/register). Like
+`TWELVE_DATA_API_KEY`, never prefix it `VITE_` — it must stay a Supabase secret, not reach
+the browser.
+
 ## App structure
 
 ```
@@ -437,6 +499,8 @@ src/
     useDeposits.js         # Fetch/add/update/delete deposits, optionally filtered by account
     useDepositSchedules.js # CRUD for deposit_schedules; materializeNow() calls the Edge Function
     useTradeSchedules.js   # CRUD for trade_schedules; materializeNow() calls the Edge Function
+    useWatchlist.js         # CRUD for watchlist (ticker + notes)
+    useStockQuote.js        # Live chart series + next earnings date for one ticker/range, via watchlist-quote
     usePortfolio.js       # KPIs, allocation %, P&L-by-ticker, holdings, and cash position; overlays live prices onto open lots
   components/
     Layout.jsx            # Sidebar nav + main content outlet
@@ -455,6 +519,7 @@ src/
     DepositScheduleForm.jsx # Add/edit recurring deposit schedule modal
     DepositsTable.jsx      # Deposit ledger table (Manual vs Recurring source badge)
     DepositSchedulesTable.jsx # Recurring schedules table (active/paused status)
+    WatchlistCard.jsx       # Stock Watch card: range-toggle chart, next earnings, notes
   pages/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
@@ -462,6 +527,7 @@ src/
     TradesPage.jsx          # Recurring trade schedules + full trade log with add/edit/filter
     PricesPage.jsx          # Manual price overrides (/prices)
     DepositsPage.jsx        # Deposit ledger + recurring schedules (/deposits)
+    StockWatchPage.jsx      # Watchlist: add ticker, view chart/earnings/notes (/watch)
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
@@ -471,6 +537,7 @@ supabase/
     refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
     materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
     materialize-trades/      # On-demand version of materialize-trades.mjs, called by "Sync Now"
+    watchlist-quote/         # Live chart + earnings lookup for Stock Watch (see "Stock Watch")
 ```
 
 ## Deployment

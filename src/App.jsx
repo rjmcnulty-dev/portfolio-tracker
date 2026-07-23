@@ -6,6 +6,7 @@ import TaxPage from './pages/TaxPage'
 import TradesPage from './pages/TradesPage'
 import PricesPage from './pages/PricesPage'
 import DepositsPage from './pages/DepositsPage'
+import StockWatchPage from './pages/StockWatchPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="trades" element={<TradesPage />} />
           <Route path="prices" element={<PricesPage />} />
           <Route path="deposits" element={<DepositsPage />} />
+          <Route path="watch" element={<StockWatchPage />} />
           <Route path="tax" element={<TaxPage />} />
         </Route>
       </Routes>
