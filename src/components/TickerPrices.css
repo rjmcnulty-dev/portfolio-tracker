@@ -60,6 +60,20 @@
   color: var(--navy-dark);
 }
 
+.is-held-col {
+  text-align: center;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.held-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
 .ticker-prices__actions {
   text-align: right;
   white-space: nowrap;

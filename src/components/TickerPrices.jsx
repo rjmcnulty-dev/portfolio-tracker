@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { useTickerPrices } from '../hooks/useTickerPrices'
+import { ACCOUNTS } from '../lib/accounts'
 import './TickerPrices.css'
 
 function formatCurrency(value) {
@@ -35,6 +36,19 @@ export default function TickerPrices() {
     () => [...new Set(trades.map((t) => t.ticker).filter(Boolean))].sort(),
     [trades],
   )
+
+  // Which accounts currently hold each ticker — same convention as holdings
+  // elsewhere in the app: an open position is a BUY row, no lot-matching
+  // against SELLs.
+  const heldByTickerAccount = useMemo(() => {
+    const map = new Map()
+    for (const trade of trades) {
+      if (trade.trade_type !== 'BUY') continue
+      if (!map.has(trade.ticker)) map.set(trade.ticker, new Set())
+      map.get(trade.ticker).add(trade.account)
+    }
+    return map
+  }, [trades])
 
   const lastRefreshed = useMemo(() => {
     const timestamps = Object.values(prices)
@@ -119,6 +133,11 @@ export default function TickerPrices() {
         <thead>
           <tr>
             <th>Ticker</th>
+            {ACCOUNTS.map((account) => (
+              <th key={account.slug} className="is-held-col">
+                {account.label}
+              </th>
+            ))}
             <th className="is-numeric">Current Price</th>
             <th>As Of</th>
             <th></th>
@@ -131,6 +150,14 @@ export default function TickerPrices() {
             return (
               <tr key={ticker}>
                 <td className="ticker-prices__ticker">{ticker}</td>
+                {ACCOUNTS.map((account) => {
+                  const isHeld = heldByTickerAccount.get(ticker)?.has(account.label)
+                  return (
+                    <td key={account.slug} className="is-held-col">
+                      {isHeld && <span className="held-dot" title={`Held in ${account.label}`} />}
+                    </td>
+                  )
+                })}
                 <td className="is-numeric">
                   {isEditing ? (
                     <input
