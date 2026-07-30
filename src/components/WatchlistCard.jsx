@@ -48,7 +48,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesError, setNotesError] = useState(null)
 
-  const { series, nextEarningsDate, loading, error } = useStockQuote(item.ticker, range)
+  const { series, nextEarningsDate, companyName, loading, error } = useStockQuote(item.ticker, range)
 
   const latestPrice = series.length ? series[series.length - 1].close : null
   const firstPrice = series.length ? series[0].close : null
@@ -85,7 +85,10 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
     <div className="watchlist-card">
       <div className="watchlist-card__header">
         <div>
-          <span className="watchlist-card__ticker">{item.ticker}</span>
+          <div className="watchlist-card__title-row">
+            <span className="watchlist-card__ticker">{item.ticker}</span>
+            {companyName && <span className="watchlist-card__company">{companyName}</span>}
+          </div>
           {latestPrice != null && (
             <span className="watchlist-card__price">
               {formatCurrency(latestPrice)}

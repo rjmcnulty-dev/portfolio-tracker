@@ -66,6 +66,17 @@ async function fetchNextEarningsDate(ticker: string, apiKey: string): Promise<st
   return entries.map((e) => e.date).sort()[0];
 }
 
+// Company name, via Finnhub's much more generous free-tier limit (60/min)
+// rather than spending another Twelve Data credit against the tight 8/min
+// budget the chart call already uses.
+async function fetchCompanyName(ticker: string, apiKey: string): Promise<string | null> {
+  const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body?.name || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
@@ -92,12 +103,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const [series, nextEarningsDate] = await Promise.all([
+    const [series, nextEarningsDate, companyName] = await Promise.all([
       fetchSeries(ticker, range, twelveDataApiKey),
       fetchNextEarningsDate(ticker, finnhubApiKey),
+      fetchCompanyName(ticker, finnhubApiKey).catch(() => null),
     ]);
 
-    return json({ series, nextEarningsDate });
+    return json({ series, nextEarningsDate, companyName });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 502);
   }

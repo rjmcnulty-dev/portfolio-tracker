@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 export function useStockQuote(ticker, range) {
   const [series, setSeries] = useState([])
   const [nextEarningsDate, setNextEarningsDate] = useState(null)
+  const [companyName, setCompanyName] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -32,7 +33,11 @@ export function useStockQuote(ticker, range) {
           .then(({ data, error: invokeError }) => {
             if (invokeError) throw invokeError
             if (data?.error) throw new Error(data.error)
-            return { series: data.series ?? [], nextEarningsDate: data.nextEarningsDate ?? null }
+            return {
+              series: data.series ?? [],
+              nextEarningsDate: data.nextEarningsDate ?? null,
+              companyName: data.companyName ?? null,
+            }
           })
           .catch((err) => {
             cacheRef.current.delete(key)
@@ -46,6 +51,7 @@ export function useStockQuote(ticker, range) {
         if (ignore) return
         setSeries(result.series)
         setNextEarningsDate(result.nextEarningsDate)
+        setCompanyName(result.companyName)
       } catch (err) {
         if (ignore) return
         setError(err.message)
@@ -60,5 +66,5 @@ export function useStockQuote(ticker, range) {
     }
   }, [ticker, range])
 
-  return { series, nextEarningsDate, loading, error }
+  return { series, nextEarningsDate, companyName, loading, error }
 }

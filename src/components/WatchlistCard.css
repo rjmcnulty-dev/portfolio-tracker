@@ -15,11 +15,22 @@
   gap: 12px;
 }
 
+.watchlist-card__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .watchlist-card__ticker {
   font-size: 18px;
   font-weight: 700;
   color: var(--navy-dark);
-  margin-right: 10px;
+}
+
+.watchlist-card__company {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .watchlist-card__price {
