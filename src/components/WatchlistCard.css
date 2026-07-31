@@ -38,6 +38,26 @@
   color: var(--text-muted);
 }
 
+.watchlist-card__header-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.watchlist-modal {
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.watchlist-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .watchlist-card__ranges {
   display: flex;
   gap: 6px;

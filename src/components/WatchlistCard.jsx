@@ -38,11 +38,113 @@ function formatEarningsDate(dateStr) {
   })
 }
 
+function ChartControls({ range, setRange, indicators }) {
+  return (
+    <>
+      <div className="watchlist-card__ranges">
+        {RANGES.map((r) => (
+          <button
+            key={r}
+            className={`range-btn ${range === r ? 'range-btn--active' : ''}`}
+            onClick={() => setRange(r)}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
+
+      <div className="watchlist-card__ranges">
+        {indicators.map(({ key, label, show, setShow, disabled }) => (
+          <button
+            key={key}
+            className={`range-btn ${show ? 'range-btn--active' : ''}`}
+            disabled={disabled}
+            onClick={() => setShow((v) => !v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function PriceChart({ chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, height }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e9ee" />
+        <XAxis
+          dataKey="date"
+          tickFormatter={(v) => formatXAxisTick(v, range)}
+          stroke="var(--text-muted)"
+          fontSize={11}
+          minTickGap={30}
+        />
+        <YAxis domain={['auto', 'auto']} tickFormatter={formatCurrency} stroke="var(--text-muted)" fontSize={11} width={70} />
+        <Tooltip
+          formatter={(value, name) => [formatCurrency(value), name]}
+          contentStyle={{ background: 'var(--navy-mid)', border: 'none', borderRadius: 8, color: '#fff' }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {showLevels &&
+          resistance.map((level) => (
+            <ReferenceLine
+              key={`res-${level.price}`}
+              y={level.price}
+              stroke="var(--red)"
+              strokeDasharray="4 4"
+              label={{ value: `R ${formatCurrency(level.price)}`, position: 'insideTopRight', fill: 'var(--red)', fontSize: 10 }}
+            />
+          ))}
+        {showLevels &&
+          support.map((level) => (
+            <ReferenceLine
+              key={`sup-${level.price}`}
+              y={level.price}
+              stroke="var(--green)"
+              strokeDasharray="4 4"
+              label={{ value: `S ${formatCurrency(level.price)}`, position: 'insideBottomRight', fill: 'var(--green)', fontSize: 10 }}
+            />
+          ))}
+        <Line type="monotone" dataKey="close" name="Close" stroke="var(--blue)" dot={false} strokeWidth={2} />
+        {showSMA20 && (
+          <Line type="monotone" dataKey="sma20" name="MA 20" stroke="var(--gold)" dot={false} strokeWidth={1.5} connectNulls={false} />
+        )}
+        {showSMA50 && (
+          <Line
+            type="monotone"
+            dataKey="sma50"
+            name="MA 50"
+            stroke="var(--light-blue)"
+            dot={false}
+            strokeWidth={1.5}
+            connectNulls={false}
+          />
+        )}
+        {showSMA200 && (
+          <Line
+            type="monotone"
+            dataKey="sma200"
+            name="MA 200"
+            stroke="var(--purple)"
+            dot={false}
+            strokeWidth={1.5}
+            connectNulls={false}
+          />
+        )}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
+  const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
@@ -57,6 +159,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
 
   const sma20 = useMemo(() => computeSMA(series, 20), [series])
   const sma50 = useMemo(() => computeSMA(series, 50), [series])
+  const sma200 = useMemo(() => computeSMA(series, 200), [series])
   const { support, resistance } = useMemo(() => findSupportResistance(series), [series])
 
   const chartData = useMemo(
@@ -64,9 +167,23 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
       mergeIndicators(series, [
         { key: 'sma20', points: sma20 },
         { key: 'sma50', points: sma50 },
+        { key: 'sma200', points: sma200 },
       ]),
-    [series, sma20, sma50],
+    [series, sma20, sma50, sma200],
   )
+
+  const indicatorToggles = [
+    { key: 'sma20', label: 'MA 20', show: showSMA20, setShow: setShowSMA20, disabled: sma20.length === 0 },
+    { key: 'sma50', label: 'MA 50', show: showSMA50, setShow: setShowSMA50, disabled: sma50.length === 0 },
+    { key: 'sma200', label: 'MA 200', show: showSMA200, setShow: setShowSMA200, disabled: sma200.length === 0 },
+    {
+      key: 'levels',
+      label: 'Support / Resistance',
+      show: showLevels,
+      setShow: setShowLevels,
+      disabled: !support.length && !resistance.length,
+    },
+  ]
 
   async function handleSaveNotes() {
     setSavingNotes(true)
@@ -80,6 +197,8 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
       setSavingNotes(false)
     }
   }
+
+  const chartProps = { chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200 }
 
   return (
     <div className="watchlist-card">
@@ -102,113 +221,20 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
             </span>
           )}
         </div>
-        <button className="btn-link btn-link--danger" onClick={() => onRemove(item.id)}>
-          Remove
-        </button>
-      </div>
-
-      <div className="watchlist-card__ranges">
-        {RANGES.map((r) => (
-          <button
-            key={r}
-            className={`range-btn ${range === r ? 'range-btn--active' : ''}`}
-            onClick={() => setRange(r)}
-          >
-            {r}
+        <div className="watchlist-card__header-actions">
+          <button className="btn-link" onClick={() => setExpanded(true)}>
+            Expand
           </button>
-        ))}
+          <button className="btn-link btn-link--danger" onClick={() => onRemove(item.id)}>
+            Remove
+          </button>
+        </div>
       </div>
 
-      <div className="watchlist-card__ranges">
-        <button
-          className={`range-btn ${showSMA20 ? 'range-btn--active' : ''}`}
-          disabled={sma20.length === 0}
-          onClick={() => setShowSMA20((v) => !v)}
-        >
-          MA 20
-        </button>
-        <button
-          className={`range-btn ${showSMA50 ? 'range-btn--active' : ''}`}
-          disabled={sma50.length === 0}
-          onClick={() => setShowSMA50((v) => !v)}
-        >
-          MA 50
-        </button>
-        <button
-          className={`range-btn ${showLevels ? 'range-btn--active' : ''}`}
-          disabled={!support.length && !resistance.length}
-          onClick={() => setShowLevels((v) => !v)}
-        >
-          Support / Resistance
-        </button>
-      </div>
+      <ChartControls range={range} setRange={setRange} indicators={indicatorToggles} />
 
       {error && <p className="watchlist-card__error">{error}</p>}
-      {loading ? (
-        <p className="watchlist-card__loading">Loading chart…</p>
-      ) : (
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e9ee" />
-            <XAxis
-              dataKey="date"
-              tickFormatter={(v) => formatXAxisTick(v, range)}
-              stroke="var(--text-muted)"
-              fontSize={11}
-              minTickGap={30}
-            />
-            <YAxis domain={['auto', 'auto']} tickFormatter={formatCurrency} stroke="var(--text-muted)" fontSize={11} width={70} />
-            <Tooltip
-              formatter={(value, name) => [formatCurrency(value), name]}
-              contentStyle={{ background: 'var(--navy-mid)', border: 'none', borderRadius: 8, color: '#fff' }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            {showLevels &&
-              resistance.map((level) => (
-                <ReferenceLine
-                  key={`res-${level.price}`}
-                  y={level.price}
-                  stroke="var(--red)"
-                  strokeDasharray="4 4"
-                  label={{ value: `R ${formatCurrency(level.price)}`, position: 'insideTopRight', fill: 'var(--red)', fontSize: 10 }}
-                />
-              ))}
-            {showLevels &&
-              support.map((level) => (
-                <ReferenceLine
-                  key={`sup-${level.price}`}
-                  y={level.price}
-                  stroke="var(--green)"
-                  strokeDasharray="4 4"
-                  label={{ value: `S ${formatCurrency(level.price)}`, position: 'insideBottomRight', fill: 'var(--green)', fontSize: 10 }}
-                />
-              ))}
-            <Line type="monotone" dataKey="close" name="Close" stroke="var(--blue)" dot={false} strokeWidth={2} />
-            {showSMA20 && (
-              <Line
-                type="monotone"
-                dataKey="sma20"
-                name="MA 20"
-                stroke="var(--gold)"
-                dot={false}
-                strokeWidth={1.5}
-                connectNulls={false}
-              />
-            )}
-            {showSMA50 && (
-              <Line
-                type="monotone"
-                dataKey="sma50"
-                name="MA 50"
-                stroke="var(--navy-light)"
-                dot={false}
-                strokeWidth={1.5}
-                connectNulls={false}
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-      )}
+      {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={240} />}
 
       <div className="watchlist-card__earnings">
         <span className="watchlist-card__earnings-label">Next Earnings</span>
@@ -231,6 +257,32 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
           {savingNotes ? 'Saving…' : 'Save Notes'}
         </button>
       </div>
+
+      {expanded && (
+        <div className="modal-overlay" onClick={() => setExpanded(false)}>
+          <div className="modal watchlist-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="watchlist-modal__header">
+              <div className="watchlist-card__title-row">
+                <span className="watchlist-card__ticker">{item.ticker}</span>
+                {companyName && <span className="watchlist-card__company">{companyName}</span>}
+              </div>
+              <button className="btn-link" onClick={() => setExpanded(false)}>
+                Close
+              </button>
+            </div>
+
+            <ChartControls range={range} setRange={setRange} indicators={indicatorToggles} />
+
+            {error && <p className="watchlist-card__error">{error}</p>}
+            {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={460} />}
+
+            <div className="watchlist-card__earnings">
+              <span className="watchlist-card__earnings-label">Next Earnings</span>
+              <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
