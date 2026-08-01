@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
+import { useTradeLotAllocations } from '../hooks/useTradeLotAllocations'
 import './TradeForm.css'
 
 const EMPTY_TRADE = {
@@ -20,16 +21,51 @@ const EMPTY_TRADE = {
   notes: '',
 }
 
+function formatCurrency(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function formatQuantity(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('en-US', { maximumFractionDigits: 6 })
+}
+
 function computeCostBasis(quantity, price, fees) {
   const total = (Number(quantity) || 0) * (Number(price) || 0) + (Number(fees) || 0)
   return total.toFixed(2)
 }
 
+// Realized P&L for a SELL = proceeds from this sale minus the cost basis of
+// whichever BUY lot(s) it's allocated to close (proportional to how many
+// shares of each lot are being closed).
+function computeRealizedPnl(quantity, price, fees, openLots, allocations) {
+  const proceeds = (Number(quantity) || 0) * (Number(price) || 0) - (Number(fees) || 0)
+  let allocatedCostBasis = 0
+  for (const lot of openLots) {
+    const allocatedQty = Number(allocations[lot.id]) || 0
+    if (!allocatedQty) continue
+    const lotQty = Number(lot.quantity) || 0
+    const perShareCost = lotQty > 0 ? (Number(lot.cost_basis) || 0) / lotQty : 0
+    allocatedCostBasis += perShareCost * allocatedQty
+  }
+  return (proceeds - allocatedCostBasis).toFixed(2)
+}
+
 export default function TradeForm({ trade, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
+  const { fetchOpenLots, fetchAllocationsForSell, saveAllocationsForSell } = useTradeLotAllocations()
+
   const [form, setForm] = useState(() => (trade ? { ...trade } : { ...EMPTY_TRADE }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  const [openLots, setOpenLots] = useState([])
+  const [lotsLoading, setLotsLoading] = useState(false)
+  const [lotsError, setLotsError] = useState(null)
+  const [allocations, setAllocations] = useState({}) // { [buyTradeId]: quantityString }
 
   // Default to the first account once the list loads — it isn't available
   // synchronously at mount, unlike the old hardcoded array.
@@ -38,18 +74,73 @@ export default function TradeForm({ trade, onClose, onSaved }) {
     setForm((prev) => (prev.account ? prev : { ...prev, account: accounts[0].name }))
   }, [accounts, trade])
 
+  // Preload this sell's existing lot allocations once, when editing one.
+  useEffect(() => {
+    if (!trade || trade.trade_type !== 'SELL') return
+    let ignore = false
+    fetchAllocationsForSell(trade.id)
+      .then((rows) => {
+        if (ignore) return
+        const initial = {}
+        for (const row of rows) initial[row.buy_trade_id] = String(row.quantity)
+        setAllocations(initial)
+      })
+      .catch((err) => {
+        if (!ignore) setLotsError(err.message)
+      })
+    return () => {
+      ignore = true
+    }
+    // trade is only used for its stable id/type here; re-running on every
+    // trade object identity change would refetch needlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trade?.id])
+
+  // Load open BUY lots for the selected account/ticker whenever they change.
+  // Excludes this sell's own prior allocations from "already closed" so its
+  // previously-claimed shares show back up as available while editing.
+  useEffect(() => {
+    if (form.trade_type !== 'SELL' || !form.account || !form.ticker) {
+      setOpenLots([])
+      return
+    }
+    let ignore = false
+    setLotsLoading(true)
+    setLotsError(null)
+    fetchOpenLots(form.account, form.ticker.toUpperCase(), trade?.id)
+      .then((lots) => {
+        if (!ignore) setOpenLots(lots)
+      })
+      .catch((err) => {
+        if (!ignore) setLotsError(err.message)
+      })
+      .finally(() => {
+        if (!ignore) setLotsLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [form.trade_type, form.account, form.ticker, trade?.id, fetchOpenLots])
+
+  const allocatedTotal = useMemo(
+    () => openLots.reduce((sum, lot) => sum + (Number(allocations[lot.id]) || 0), 0),
+    [openLots, allocations],
+  )
+
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  // Cost Basis auto-recalculates from quantity/price/fees as they're edited,
-  // so the common case (basis = qty * price + fees) needs no manual entry.
-  // It stays a normal editable input for the rare case a real cost basis
-  // differs (e.g. a wash-sale-adjusted carryover).
+  // Cost Basis (and, for a SELL, Realized P&L) auto-recalculate from
+  // quantity/price/fees as they're edited. Both stay normal editable inputs
+  // for the rare case a real value differs (e.g. a wash-sale adjustment).
   function handleCostInputChange(field, value) {
     setForm((prev) => {
       const next = { ...prev, [field]: value }
       next.cost_basis = computeCostBasis(next.quantity, next.price, next.fees)
+      if (next.trade_type === 'SELL') {
+        next.realized_pnl = computeRealizedPnl(next.quantity, next.price, next.fees, openLots, allocations)
+      }
       return next
     })
   }
@@ -58,10 +149,37 @@ export default function TradeForm({ trade, onClose, onSaved }) {
     setForm((prev) => ({ ...prev, cost_basis: computeCostBasis(prev.quantity, prev.price, prev.fees) }))
   }
 
+  function handleRecalculateRealizedPnl() {
+    setForm((prev) => ({
+      ...prev,
+      realized_pnl: computeRealizedPnl(prev.quantity, prev.price, prev.fees, openLots, allocations),
+    }))
+  }
+
+  function handleAllocationChange(lotId, value) {
+    const nextAllocations = { ...allocations, [lotId]: value }
+    setAllocations(nextAllocations)
+    setForm((prev) => ({
+      ...prev,
+      realized_pnl: computeRealizedPnl(prev.quantity, prev.price, prev.fees, openLots, nextAllocations),
+    }))
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
-    setSaving(true)
     setError(null)
+
+    const isSell = form.trade_type === 'SELL'
+
+    if (isSell) {
+      const qty = Number(form.quantity) || 0
+      if (Math.abs(allocatedTotal - qty) > 1e-6) {
+        setError(`Allocated ${formatQuantity(allocatedTotal)} share(s) to lots, but selling ${formatQuantity(qty)} — these must match exactly.`)
+        return
+      }
+    }
+
+    setSaving(true)
 
     const payload = {
       account: form.account,
@@ -80,20 +198,41 @@ export default function TradeForm({ trade, onClose, onSaved }) {
       notes: form.notes,
     }
 
-    const { error: saveError } = trade?.id
-      ? await supabase.from('trades').update(payload).eq('id', trade.id)
-      : await supabase.from('trades').insert(payload)
-
-    setSaving(false)
+    const { data: savedTrade, error: saveError } = trade?.id
+      ? await supabase.from('trades').update(payload).eq('id', trade.id).select().single()
+      : await supabase.from('trades').insert(payload).select().single()
 
     if (saveError) {
+      setSaving(false)
       setError(saveError.message)
       return
     }
 
+    if (isSell) {
+      try {
+        const allocationRows = openLots
+          .map((lot) => {
+            const qty = Number(allocations[lot.id]) || 0
+            if (!qty) return null
+            const lotQty = Number(lot.quantity) || 0
+            const perShareCost = lotQty > 0 ? (Number(lot.cost_basis) || 0) / lotQty : 0
+            return { buy_trade_id: lot.id, quantity: qty, cost_basis: perShareCost * qty }
+          })
+          .filter(Boolean)
+        await saveAllocationsForSell(savedTrade.id, allocationRows)
+      } catch (err) {
+        setSaving(false)
+        setError(`Trade saved, but lot allocations failed: ${err.message}`)
+        return
+      }
+    }
+
+    setSaving(false)
     onSaved?.()
     onClose?.()
   }
+
+  const allocationMatch = Math.abs(allocatedTotal - (Number(form.quantity) || 0)) < 1e-6
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -194,7 +333,14 @@ export default function TradeForm({ trade, onClose, onSaved }) {
               />
             </label>
             <label>
-              Realized P&amp;L
+              <span className="trade-form__label-row">
+                Realized P&amp;L
+                {form.trade_type === 'SELL' && (
+                  <button type="button" className="btn-link" onClick={handleRecalculateRealizedPnl}>
+                    Recalculate
+                  </button>
+                )}
+              </span>
               <input
                 type="number"
                 step="any"
@@ -224,6 +370,61 @@ export default function TradeForm({ trade, onClose, onSaved }) {
               <textarea value={form.notes} onChange={(e) => handleChange('notes', e.target.value)} />
             </label>
           </div>
+
+          {form.trade_type === 'SELL' && (
+            <div className="trade-form__lots">
+              <h3 className="trade-form__lots-title">Lots to Close</h3>
+              {!form.account || !form.ticker ? (
+                <p className="trade-form__hint">Select an account and ticker to see open lots.</p>
+              ) : lotsLoading ? (
+                <p className="trade-form__hint">Loading open lots…</p>
+              ) : !openLots.length ? (
+                <p className="trade-form__hint">
+                  No open {form.ticker.toUpperCase()} lots in {form.account}.
+                </p>
+              ) : (
+                <>
+                  <table className="trade-form__lots-table">
+                    <thead>
+                      <tr>
+                        <th>Bought</th>
+                        <th className="is-numeric">Remaining</th>
+                        <th className="is-numeric">Cost/Share</th>
+                        <th className="is-numeric">Allocate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {openLots.map((lot) => {
+                        const lotQty = Number(lot.quantity) || 0
+                        const perShareCost = lotQty > 0 ? (Number(lot.cost_basis) || 0) / lotQty : 0
+                        return (
+                          <tr key={lot.id}>
+                            <td>{lot.trade_date}</td>
+                            <td className="is-numeric">{formatQuantity(lot.remaining)}</td>
+                            <td className="is-numeric">{formatCurrency(perShareCost)}</td>
+                            <td className="is-numeric">
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                max={lot.remaining}
+                                value={allocations[lot.id] ?? ''}
+                                onChange={(e) => handleAllocationChange(lot.id, e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <p className={`trade-form__lots-total ${allocationMatch ? 'is-positive' : 'is-negative'}`}>
+                    Allocated {formatQuantity(allocatedTotal)} of {formatQuantity(form.quantity || 0)} share(s)
+                  </p>
+                </>
+              )}
+              {lotsError && <p className="trade-form__error">{lotsError}</p>}
+            </div>
+          )}
 
           {error && <p className="trade-form__error">{error}</p>}
 

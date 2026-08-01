@@ -12,15 +12,9 @@ function pnlClass(value) {
   return ''
 }
 
-// Cash isn't a gain/loss figure, so only flag it when negative (spent more
-// than recorded deposits cover) rather than coloring positive balances green.
-function warnIfNegativeClass(value) {
-  return value < 0 ? 'kpi-card__value--negative' : ''
-}
-
 export default function KPIRow({ kpis, cashPosition }) {
   const cards = [
-    { label: 'Cash Position', value: cashPosition, colorClass: warnIfNegativeClass(cashPosition) },
+    { label: 'Cash Position', value: cashPosition, colorClass: pnlClass(cashPosition) },
     { label: 'Invested', value: kpis.invested },
     { label: 'Market Value', value: kpis.marketValue },
     { label: 'Unrealized P&L', value: kpis.unrealizedPnl, colorClass: pnlClass(kpis.unrealizedPnl) },

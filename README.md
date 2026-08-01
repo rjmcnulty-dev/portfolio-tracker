@@ -65,9 +65,9 @@ tickers you don't hold — price chart (1D through 1Y), next earnings date, and 
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the nine tables the app reads
-and writes: `accounts`, `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
-`deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
+Run the following in the Supabase SQL editor. It creates the ten tables the app reads
+and writes: `accounts`, `trades`, `trade_lot_allocations`, `tax_settings`, `roth_conversions`,
+`ticker_prices`, `deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -113,6 +113,26 @@ create table if not exists trades (
 
 create index if not exists trades_account_idx on trades (account);
 create index if not exists trades_ticker_idx on trades (ticker);
+
+-- ─────────────────────────────────────────────
+-- trade_lot_allocations: ties a SELL to the specific
+-- BUY lot(s) it closes, so realized P&L is computed
+-- from actual matched cost basis instead of a
+-- manually typed number. One row per (sell, buy) pair
+-- — a sell can span multiple lots, and a lot can be
+-- partially closed across multiple sells.
+-- ─────────────────────────────────────────────
+create table if not exists trade_lot_allocations (
+  id uuid primary key default gen_random_uuid(),
+  sell_trade_id uuid not null references trades (id) on delete cascade,
+  buy_trade_id uuid not null references trades (id),
+  quantity numeric not null check (quantity > 0),
+  cost_basis numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists trade_lot_allocations_sell_idx on trade_lot_allocations (sell_trade_id);
+create index if not exists trade_lot_allocations_buy_idx on trade_lot_allocations (buy_trade_id);
 
 -- ─────────────────────────────────────────────
 -- tax_settings: one row per tax year, used by
@@ -258,6 +278,7 @@ create table if not exists watchlist (
 -- ─────────────────────────────────────────────
 alter table accounts enable row level security;
 alter table trades enable row level security;
+alter table trade_lot_allocations enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
@@ -268,6 +289,7 @@ alter table watchlist enable row level security;
 
 create policy "Allow all on accounts" on accounts for all using (true) with check (true);
 create policy "Allow all on trades" on trades for all using (true) with check (true);
+create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
@@ -315,6 +337,26 @@ alter table trades add constraint trades_account_fkey foreign key (account) refe
 alter table deposits add constraint deposits_account_fkey foreign key (account) references accounts (name) on update cascade;
 alter table deposit_schedules add constraint deposit_schedules_account_fkey foreign key (account) references accounts (name) on update cascade;
 alter table trade_schedules add constraint trade_schedules_account_fkey foreign key (account) references accounts (name) on update cascade;
+```
+
+**If you already have a database from before lot matching**, run this migration to add
+`trade_lot_allocations` without re-running the full block above:
+
+```sql
+create table if not exists trade_lot_allocations (
+  id uuid primary key default gen_random_uuid(),
+  sell_trade_id uuid not null references trades (id) on delete cascade,
+  buy_trade_id uuid not null references trades (id),
+  quantity numeric not null check (quantity > 0),
+  cost_basis numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists trade_lot_allocations_sell_idx on trade_lot_allocations (sell_trade_id);
+create index if not exists trade_lot_allocations_buy_idx on trade_lot_allocations (buy_trade_id);
+
+alter table trade_lot_allocations enable row level security;
+create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for all using (true) with check (true);
 ```
 
 ## Daily price refresh
@@ -484,6 +526,32 @@ npm run trades:materialize
 
 Auto-generated trades are marked with a Source badge (Recurring vs. Manual) on the Trade
 Log table, same as deposits.
+
+## Realized P&L / lot matching
+
+Realized P&L for a SELL isn't typed in — it's computed from the specific BUY lot(s) the
+sell closes, tracked in `trade_lot_allocations` (one row per sell/buy pair, since a sell
+can span multiple lots and a lot can be partially closed across multiple sells).
+
+When you enter or edit a SELL trade, the form's **Lots to Close** section lists every open
+BUY lot for that ticker + account, each annotated with its remaining (unsold) quantity —
+a lot that's already been fully closed by a prior sell won't appear. You choose how many
+shares to close from each lot; the total must exactly match the sell's quantity. Realized
+P&L then auto-computes as proceeds (`quantity * price - fees`) minus the proportional cost
+basis of the lot(s) closed, following the same "auto-calculate + Recalculate button"
+pattern as Cost Basis — it updates live as you adjust the allocation, but stays manually
+editable with an explicit Recalculate action for edge cases.
+
+This also changes what "holdings" and "invested" mean: a BUY lot's contribution to
+Holdings, Invested, and unrealized P&L is based on its *remaining* quantity (original
+quantity minus whatever's been allocated to sells), not its original quantity — a fully
+closed lot drops out of Holdings entirely. The BUY row's own `quantity`/`price`/`cost_basis`
+fields are never modified; they stay the accurate historical record of that trade.
+
+A BUY trade that's been allocated to one or more sells can't be deleted directly (the
+delete button will show an error telling you to delete the related SELL trade(s) first) —
+deleting it out from under an already-computed realized P&L would silently corrupt that
+number.
 
 ## Cash position
 

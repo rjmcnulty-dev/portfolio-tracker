@@ -110,7 +110,9 @@ export default function TaxHeadroom() {
 
         <div className="tax-card__headroom">
           <span className="tax-card__headroom-label">Remaining Headroom</span>
-          <span className={`tax-card__headroom-value ${headroom < 0 ? 'is-negative' : ''}`}>
+          <span
+            className={`tax-card__headroom-value ${headroom < 0 ? 'is-negative' : headroom > 0 ? 'is-positive' : ''}`}
+          >
             {headroom.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
           </span>
         </div>

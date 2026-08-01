@@ -54,11 +54,11 @@
   font-size: 10px;
 }
 
-.is-positive {
+.holdings-summary td.is-positive {
   color: var(--green);
 }
 
-.is-negative {
+.holdings-summary td.is-negative {
   color: var(--red);
 }
 

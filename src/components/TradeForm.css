@@ -46,3 +46,67 @@
   border-top: 1px solid #edf0f3;
   padding-top: 16px;
 }
+
+.trade-form__lots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #edf0f3;
+  padding-top: 16px;
+}
+
+.trade-form__lots-title {
+  font-size: 13px;
+  color: var(--navy-dark);
+  margin: 0;
+}
+
+.trade-form__lots-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.trade-form__lots-table th {
+  text-align: left;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trade-form__lots-table th.is-numeric {
+  text-align: right;
+}
+
+.trade-form__lots-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.trade-form__lots-table td.is-numeric {
+  text-align: right;
+}
+
+.trade-form__lots-table input {
+  width: 90px;
+  text-align: right;
+}
+
+.trade-form__lots-total {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.trade-form__lots-total.is-positive {
+  color: var(--green);
+}
+
+.trade-form__lots-total.is-negative {
+  color: var(--red);
+}

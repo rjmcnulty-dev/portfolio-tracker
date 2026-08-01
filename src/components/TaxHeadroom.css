@@ -49,6 +49,10 @@
   color: var(--gold);
 }
 
+.tax-card__headroom-value.is-positive {
+  color: var(--green);
+}
+
 .tax-card__headroom-value.is-negative {
   color: var(--red);
 }

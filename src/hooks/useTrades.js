@@ -49,6 +49,22 @@ export function useTrades(account = 'All') {
 
   const deleteTrade = useCallback(
     async (id) => {
+      // A BUY that's been (partially or fully) closed by a SELL can't be
+      // deleted without corrupting that sell's realized P&L — the FK on
+      // trade_lot_allocations.buy_trade_id blocks this at the DB level too
+      // (no cascade there, on purpose), but that raw FK error isn't a useful
+      // message, so check first and say specifically why.
+      const { count, error: countError } = await supabase
+        .from('trade_lot_allocations')
+        .select('id', { count: 'exact', head: true })
+        .eq('buy_trade_id', id)
+      if (countError) throw countError
+      if (count) {
+        throw new Error(
+          `Can't delete — this BUY trade closes ${count} sell allocation${count === 1 ? '' : 's'}. Delete the related SELL trade(s) first.`,
+        )
+      }
+
       const { error: deleteError } = await supabase.from('trades').delete().eq('id', id)
       if (deleteError) throw deleteError
       await fetchTrades()

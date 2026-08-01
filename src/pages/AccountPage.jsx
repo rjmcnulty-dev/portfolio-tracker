@@ -47,7 +47,7 @@ export default function AccountPage() {
           </section>
           <section className="page__section">
             <h2>Trade Detail</h2>
-            <HoldingsTable trades={trades} showAccount={false} onDelete={deleteTrade} />
+            <HoldingsTable trades={trades} onDelete={deleteTrade} />
           </section>
         </>
       )}

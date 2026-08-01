@@ -32,7 +32,7 @@ export default function Dashboard() {
           </section>
           <section className="page__section">
             <h2>Trade Detail</h2>
-            <HoldingsTable trades={trades} showAccount onDelete={deleteTrade} />
+            <HoldingsTable trades={trades} onDelete={deleteTrade} />
           </section>
         </>
       )}

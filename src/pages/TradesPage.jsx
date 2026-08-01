@@ -138,12 +138,7 @@ export default function TradesPage() {
         {loading ? (
           <p className="page__loading">Loading trades…</p>
         ) : (
-          <HoldingsTable
-            trades={filteredTrades}
-            showAccount={accountFilter === 'All'}
-            onEdit={openEditForm}
-            onDelete={deleteTrade}
-          />
+          <HoldingsTable trades={filteredTrades} onEdit={openEditForm} onDelete={deleteTrade} />
         )}
       </section>
 
