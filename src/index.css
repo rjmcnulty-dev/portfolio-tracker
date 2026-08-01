@@ -101,19 +101,23 @@ h3 {
   margin: 0;
 }
 
-.sidebar__add-account {
+.sidebar__manage-accounts {
   background: none;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--text-muted-on-dark);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
 }
 
-.sidebar__add-account:hover {
+.sidebar__manage-accounts:hover {
   color: var(--gold);
+  border-color: var(--gold);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -315,6 +319,15 @@ h3 {
 
 .btn--ghost:hover:not(:disabled) {
   background: rgba(59, 80, 104, 0.08);
+}
+
+.btn--danger {
+  background: var(--red);
+  color: #fff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #c73d3c;
 }
 
 .btn-link {

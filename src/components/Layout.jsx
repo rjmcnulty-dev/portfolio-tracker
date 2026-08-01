@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAccounts } from '../hooks/useAccounts'
 import { slugify } from '../lib/accounts'
-import AddAccountForm from './AddAccountForm'
+import ManageAccountsForm from './ManageAccountsForm'
 
 function linkClass({ isActive }) {
   return `sidebar__link ${isActive ? 'is-active' : ''}`
 }
 
 export default function Layout() {
-  const { accounts, addAccount, error: accountsError } = useAccounts()
-  const [showAddAccount, setShowAddAccount] = useState(false)
+  const { accounts, addAccount, deleteAccount, error: accountsError } = useAccounts()
+  const [showManageAccounts, setShowManageAccounts] = useState(false)
 
   return (
     <div className="app-shell">
@@ -23,11 +23,11 @@ export default function Layout() {
           <div className="sidebar__section-header">
             <p className="sidebar__section-label">Accounts</p>
             <button
-              className="sidebar__add-account"
-              onClick={() => setShowAddAccount(true)}
-              title="Add account"
+              className="sidebar__manage-accounts"
+              onClick={() => setShowManageAccounts(true)}
+              title="Manage accounts"
             >
-              +
+              Manage
             </button>
           </div>
           <NavLink to="/" end className={linkClass}>
@@ -61,8 +61,13 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {showAddAccount && (
-        <AddAccountForm onClose={() => setShowAddAccount(false)} onAdd={addAccount} />
+      {showManageAccounts && (
+        <ManageAccountsForm
+          accounts={accounts}
+          onClose={() => setShowManageAccounts(false)}
+          onAdd={addAccount}
+          onDelete={deleteAccount}
+        />
       )}
     </div>
   )

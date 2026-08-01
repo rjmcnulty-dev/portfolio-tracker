@@ -1,0 +1,15 @@
+.confirm-dialog {
+  max-width: 420px;
+}
+
+.confirm-dialog__message {
+  color: var(--text-primary);
+  font-size: 14px;
+  margin: 0 0 20px;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
