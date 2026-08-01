@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { useStockQuote } from '../hooks/useStockQuote'
 import { computeSMA, findSupportResistance, mergeIndicators } from '../lib/technicalIndicators'
+import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
 const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y']
@@ -145,6 +146,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
   const [expanded, setExpanded] = useState(false)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
@@ -225,7 +227,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
           <button className="btn-link" onClick={() => setExpanded(true)}>
             Expand
           </button>
-          <button className="btn-link btn-link--danger" onClick={() => onRemove(item.id)}>
+          <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
             Remove
           </button>
         </div>
@@ -282,6 +284,19 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmingRemove && (
+        <ConfirmDialog
+          title="Remove from watchlist?"
+          message={`Remove ${item.ticker} from Stock Watch? Your notes for it will be deleted too.`}
+          confirmLabel="Remove"
+          onCancel={() => setConfirmingRemove(false)}
+          onConfirm={() => {
+            setConfirmingRemove(false)
+            onRemove(item.id)
+          }}
+        />
       )}
     </div>
   )

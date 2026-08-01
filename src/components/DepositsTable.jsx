@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import './DepositsTable.css'
 
 const COLUMNS = [
@@ -22,6 +23,7 @@ function sourceValue(deposit) {
 export default function DepositsTable({ deposits, showAccount = true, onEdit, onDelete }) {
   const [sortKey, setSortKey] = useState('deposit_date')
   const [sortDir, setSortDir] = useState('desc')
+  const [confirmingDeposit, setConfirmingDeposit] = useState(null)
 
   const columns = COLUMNS.filter((col) => !col.accountOnly || showAccount)
 
@@ -106,7 +108,7 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
                     </button>
                   )}
                   {onDelete && (
-                    <button className="btn-link btn-link--danger" onClick={() => onDelete(deposit.id)}>
+                    <button className="btn-link btn-link--danger" onClick={() => setConfirmingDeposit(deposit)}>
                       Delete
                     </button>
                   )}
@@ -116,6 +118,17 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
           ))}
         </tbody>
       </table>
+      {confirmingDeposit && (
+        <ConfirmDialog
+          title="Delete deposit?"
+          message={`Delete the ${formatCurrency(confirmingDeposit.amount)} deposit from ${confirmingDeposit.deposit_date}? This can't be undone.`}
+          onCancel={() => setConfirmingDeposit(null)}
+          onConfirm={() => {
+            onDelete(confirmingDeposit.id)
+            setConfirmingDeposit(null)
+          }}
+        />
+      )}
     </div>
   )
 }

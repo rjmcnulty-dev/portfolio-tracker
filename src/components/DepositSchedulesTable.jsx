@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import './DepositsTable.css'
 
 function formatCurrency(value) {
@@ -14,6 +16,8 @@ const FREQUENCY_LABELS = {
 }
 
 export default function DepositSchedulesTable({ schedules, showAccount = true, onEdit, onDelete }) {
+  const [confirmingSchedule, setConfirmingSchedule] = useState(null)
+
   if (!schedules.length) {
     return <div className="deposits-table__empty">No recurring deposits set up yet.</div>
   }
@@ -59,7 +63,7 @@ export default function DepositSchedulesTable({ schedules, showAccount = true, o
                     </button>
                   )}
                   {onDelete && (
-                    <button className="btn-link btn-link--danger" onClick={() => onDelete(schedule.id)}>
+                    <button className="btn-link btn-link--danger" onClick={() => setConfirmingSchedule(schedule)}>
                       Delete
                     </button>
                   )}
@@ -69,6 +73,17 @@ export default function DepositSchedulesTable({ schedules, showAccount = true, o
           ))}
         </tbody>
       </table>
+      {confirmingSchedule && (
+        <ConfirmDialog
+          title="Delete recurring deposit?"
+          message={`Delete the ${formatCurrency(confirmingSchedule.amount)} ${FREQUENCY_LABELS[confirmingSchedule.frequency]?.toLowerCase() ?? confirmingSchedule.frequency} schedule for ${confirmingSchedule.account}? Already-materialized deposits are not affected.`}
+          onCancel={() => setConfirmingSchedule(null)}
+          onConfirm={() => {
+            onDelete(confirmingSchedule.id)
+            setConfirmingSchedule(null)
+          }}
+        />
+      )}
     </div>
   )
 }

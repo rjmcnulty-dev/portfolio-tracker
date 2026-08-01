@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import './TradeSchedulesTable.css'
 
 function formatCurrency(value) {
@@ -14,6 +16,8 @@ const FREQUENCY_LABELS = {
 }
 
 export default function TradeSchedulesTable({ schedules, showAccount = true, onEdit, onDelete }) {
+  const [confirmingSchedule, setConfirmingSchedule] = useState(null)
+
   if (!schedules.length) {
     return <div className="trade-schedules__empty">No recurring trades set up yet.</div>
   }
@@ -61,7 +65,7 @@ export default function TradeSchedulesTable({ schedules, showAccount = true, onE
                     </button>
                   )}
                   {onDelete && (
-                    <button className="btn-link btn-link--danger" onClick={() => onDelete(schedule.id)}>
+                    <button className="btn-link btn-link--danger" onClick={() => setConfirmingSchedule(schedule)}>
                       Delete
                     </button>
                   )}
@@ -71,6 +75,17 @@ export default function TradeSchedulesTable({ schedules, showAccount = true, onE
           ))}
         </tbody>
       </table>
+      {confirmingSchedule && (
+        <ConfirmDialog
+          title="Delete recurring trade?"
+          message={`Delete the ${formatCurrency(confirmingSchedule.dollar_amount)} ${FREQUENCY_LABELS[confirmingSchedule.frequency]?.toLowerCase() ?? confirmingSchedule.frequency} ${confirmingSchedule.ticker} schedule for ${confirmingSchedule.account}? Already-materialized trades are not affected.`}
+          onCancel={() => setConfirmingSchedule(null)}
+          onConfirm={() => {
+            onDelete(confirmingSchedule.id)
+            setConfirmingSchedule(null)
+          }}
+        />
+      )}
     </div>
   )
 }

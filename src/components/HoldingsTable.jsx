@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import './HoldingsTable.css'
 
 const COLUMNS = [
@@ -37,6 +38,7 @@ function sourceValue(trade) {
 export default function HoldingsTable({ trades, showAccount = true, onEdit, onDelete }) {
   const [sortKey, setSortKey] = useState('trade_date')
   const [sortDir, setSortDir] = useState('desc')
+  const [confirmingTrade, setConfirmingTrade] = useState(null)
 
   const columns = COLUMNS.filter((col) => !col.accountOnly || showAccount)
 
@@ -129,7 +131,7 @@ export default function HoldingsTable({ trades, showAccount = true, onEdit, onDe
                     </button>
                   )}
                   {onDelete && (
-                    <button className="btn-link btn-link--danger" onClick={() => onDelete(trade.id)}>
+                    <button className="btn-link btn-link--danger" onClick={() => setConfirmingTrade(trade)}>
                       Delete
                     </button>
                   )}
@@ -139,6 +141,17 @@ export default function HoldingsTable({ trades, showAccount = true, onEdit, onDe
           ))}
         </tbody>
       </table>
+      {confirmingTrade && (
+        <ConfirmDialog
+          title="Delete trade?"
+          message={`Delete the ${confirmingTrade.ticker} trade from ${confirmingTrade.trade_date}? This can't be undone.`}
+          onCancel={() => setConfirmingTrade(null)}
+          onConfirm={() => {
+            onDelete(confirmingTrade.id)
+            setConfirmingTrade(null)
+          }}
+        />
+      )}
     </div>
   )
 }
