@@ -1,19 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import './DepositForm.css'
 
 const EMPTY_DEPOSIT = {
-  account: ACCOUNTS[0].label,
+  account: '',
   amount: '',
   deposit_date: new Date().toISOString().slice(0, 10),
   notes: '',
 }
 
 export default function DepositForm({ deposit, onClose, onSaved }) {
+  const { accounts } = useAccounts()
   const [form, setForm] = useState(() => (deposit ? { ...deposit } : { ...EMPTY_DEPOSIT }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (deposit || !accounts.length) return
+    setForm((prev) => (prev.account ? prev : { ...prev, account: accounts[0].name }))
+  }, [accounts, deposit])
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -55,9 +61,9 @@ export default function DepositForm({ deposit, onClose, onSaved }) {
             <label>
               Account
               <select value={form.account} onChange={(e) => handleChange('account', e.target.value)}>
-                {ACCOUNTS.map((a) => (
-                  <option key={a.slug} value={a.label}>
-                    {a.label}
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.name}>
+                    {a.name}
                   </option>
                 ))}
               </select>

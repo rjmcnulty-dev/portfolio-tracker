@@ -65,8 +65,8 @@ tickers you don't hold — price chart (1D through 1Y), next earnings date, and 
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the eight tables the app reads
-and writes: `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
+Run the following in the Supabase SQL editor. It creates the nine tables the app reads
+and writes: `accounts`, `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
 `deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
@@ -74,11 +74,27 @@ and writes: `trades`, `tax_settings`, `roth_conversions`, `ticker_prices`,
 create extension if not exists "pgcrypto";
 
 -- ─────────────────────────────────────────────
+-- accounts: the list of accounts everything else
+-- (trades, deposits, schedules) references. Add
+-- new ones from the sidebar's "+" button (see
+-- "Accounts" below) — no code change needed.
+-- ─────────────────────────────────────────────
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now()
+);
+
+insert into accounts (name)
+values ('Robinhood'), ('Traditional IRA'), ('Roth IRA')
+on conflict (name) do nothing;
+
+-- ─────────────────────────────────────────────
 -- trades: every buy/sell across all accounts
 -- ─────────────────────────────────────────────
 create table if not exists trades (
   id uuid primary key default gen_random_uuid(),
-  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  account text not null references accounts (name) on update cascade,
   ticker text not null,
   trade_type text not null check (trade_type in ('BUY', 'SELL')),
   quantity numeric not null,
@@ -151,7 +167,7 @@ create table if not exists ticker_prices (
 -- ─────────────────────────────────────────────
 create table if not exists deposit_schedules (
   id uuid primary key default gen_random_uuid(),
-  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  account text not null references accounts (name) on update cascade,
   amount numeric not null,
   frequency text not null check (frequency in ('daily', 'weekly', 'biweekly', 'monthly')),
   start_date date not null,
@@ -171,7 +187,7 @@ create index if not exists deposit_schedules_account_idx on deposit_schedules (a
 -- ─────────────────────────────────────────────
 create table if not exists deposits (
   id uuid primary key default gen_random_uuid(),
-  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  account text not null references accounts (name) on update cascade,
   amount numeric not null,
   deposit_date date not null,
   schedule_id uuid references deposit_schedules (id) on delete set null,
@@ -198,7 +214,7 @@ create unique index if not exists deposits_schedule_date_uidx on deposits (sched
 -- ─────────────────────────────────────────────
 create table if not exists trade_schedules (
   id uuid primary key default gen_random_uuid(),
-  account text not null check (account in ('Robinhood', 'Traditional IRA', 'Roth IRA')),
+  account text not null references accounts (name) on update cascade,
   ticker text not null,
   dollar_amount numeric not null,
   frequency text not null check (frequency in ('daily', 'weekly', 'biweekly', 'monthly')),
@@ -240,6 +256,7 @@ create table if not exists watchlist (
 -- tighten these policies (e.g. scope to auth.uid()) before sharing
 -- the project or adding multi-user auth.
 -- ─────────────────────────────────────────────
+alter table accounts enable row level security;
 alter table trades enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
@@ -249,6 +266,7 @@ alter table deposits enable row level security;
 alter table trade_schedules enable row level security;
 alter table watchlist enable row level security;
 
+create policy "Allow all on accounts" on accounts for all using (true) with check (true);
 create policy "Allow all on trades" on trades for all using (true) with check (true);
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
@@ -257,6 +275,46 @@ create policy "Allow all on deposit_schedules" on deposit_schedules for all usin
 create policy "Allow all on deposits" on deposits for all using (true) with check (true);
 create policy "Allow all on trade_schedules" on trade_schedules for all using (true) with check (true);
 create policy "Allow all on watchlist" on watchlist for all using (true) with check (true);
+```
+
+**If you already have a database from before accounts became dynamic**, run this
+migration instead of (or in addition to) re-running the block above — it creates
+`accounts`, seeds it from your existing data, drops the old fixed-enum CHECK constraints,
+and adds the FK in their place:
+
+```sql
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table accounts enable row level security;
+create policy "Allow all on accounts" on accounts for all using (true) with check (true);
+
+insert into accounts (name)
+values ('Robinhood'), ('Traditional IRA'), ('Roth IRA')
+on conflict (name) do nothing;
+
+do $$
+declare
+  r record;
+begin
+  for r in
+    select conname, conrelid::regclass as tbl
+    from pg_constraint
+    where contype = 'c'
+      and conrelid in ('trades'::regclass, 'deposits'::regclass, 'deposit_schedules'::regclass, 'trade_schedules'::regclass)
+      and pg_get_constraintdef(oid) like '%account%'
+  loop
+    execute format('alter table %s drop constraint %I', r.tbl, r.conname);
+  end loop;
+end $$;
+
+alter table trades add constraint trades_account_fkey foreign key (account) references accounts (name) on update cascade;
+alter table deposits add constraint deposits_account_fkey foreign key (account) references accounts (name) on update cascade;
+alter table deposit_schedules add constraint deposit_schedules_account_fkey foreign key (account) references accounts (name) on update cascade;
+alter table trade_schedules add constraint trade_schedules_account_fkey foreign key (account) references accounts (name) on update cascade;
 ```
 
 ## Daily price refresh
@@ -486,14 +544,36 @@ Get a free Finnhub key at [finnhub.io/register](https://finnhub.io/register). Li
 `TWELVE_DATA_API_KEY`, never prefix it `VITE_` — it must stay a Supabase secret, not reach
 the browser.
 
+## Accounts
+
+Accounts (Robinhood, Traditional IRA, Roth IRA, and anything you add) live in the
+`accounts` table instead of a hardcoded list — click the **+** next to "Accounts" in the
+sidebar to add a new one, and it immediately shows up everywhere an account is
+selectable: the sidebar nav, every account dropdown (Trade/Deposit/Schedule forms), every
+account filter (Trade Log, Deposits, Prices' held-by-account columns), and account routing
+(`/account/:slug`, where the slug is the account name lower-cased and hyphenated by
+`slugify()` in `src/lib/accounts.js` — not a separate stored column).
+
+`trades.account`, `deposits.account`, `deposit_schedules.account`, and
+`trade_schedules.account` are foreign keys to `accounts.name` (`on update cascade`), not a
+fixed-enum CHECK constraint like before. `useAccounts` is a plain hook (matching the rest
+of the app's hooks, no React Context) called independently wherever the account list is
+needed — accounts change rarely and the list is tiny, so the handful of redundant fetches
+that implies is a non-issue.
+
+Only **adding** accounts is supported for now — no rename or delete UI yet (deleting one
+with existing trades/deposits attached needs a real decision about what happens to that
+data, so it's deferred rather than half-built).
+
 ## App structure
 
 ```
 src/
   lib/
     supabase.js         # Supabase client init
-    accounts.js         # Account slug <-> label mapping
+    accounts.js         # slugify() for account name -> URL slug (no longer a static list)
   hooks/
+    useAccounts.js          # Fetch accounts; addAccount() — see "Accounts"
     useTrades.js         # Fetch/add/update/delete trades, optionally filtered by account
     useTickerPrices.js    # Latest price per ticker; updatePrice() for manual edits, refreshAll() calls the Edge Function
     useDeposits.js         # Fetch/add/update/delete deposits, optionally filtered by account
@@ -503,7 +583,8 @@ src/
     useStockQuote.js        # Live chart series + next earnings date for one ticker/range, via watchlist-quote
     usePortfolio.js       # KPIs, allocation %, P&L-by-ticker, holdings, and cash position; overlays live prices onto open lots
   components/
-    Layout.jsx            # Sidebar nav + main content outlet
+    Layout.jsx            # Sidebar nav (incl. Add Account) + main content outlet
+    AddAccountForm.jsx     # Add-account modal, opened from the sidebar's "+"
     KPIRow.jsx             # 6 stat cards (cash position, invested, mkt value, unrealized, realized, total P&L)
     AllocationDonut.jsx    # Recharts PieChart, market value % by ticker
     PnLBarChart.jsx        # Recharts horizontal BarChart, realized vs unrealized by ticker
@@ -522,7 +603,7 @@ src/
     WatchlistCard.jsx       # Stock Watch card: range-toggle chart, next earnings, notes
   pages/
     Dashboard.jsx          # All Accounts view
-    AccountPage.jsx        # Single account view (Robinhood / Traditional IRA / Roth IRA)
+    AccountPage.jsx        # Single account view, resolved from the URL slug via accounts
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
     TradesPage.jsx          # Recurring trade schedules + full trade log with add/edit/filter
     PricesPage.jsx          # Manual price overrides (/prices)

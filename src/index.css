@@ -90,6 +90,33 @@ h3 {
   margin: 20px 8px 8px;
 }
 
+.sidebar__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 4px 8px;
+}
+
+.sidebar__section-header .sidebar__section-label {
+  margin: 0;
+}
+
+.sidebar__add-account {
+  background: none;
+  border: none;
+  color: var(--text-muted-on-dark);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sidebar__add-account:hover {
+  color: var(--gold);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .sidebar__nav {
   display: flex;
   flex-direction: column;

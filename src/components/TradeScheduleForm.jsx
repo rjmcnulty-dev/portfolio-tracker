@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import './TradeForm.css'
 
 const FREQUENCIES = [
@@ -11,7 +11,7 @@ const FREQUENCIES = [
 ]
 
 const EMPTY_SCHEDULE = {
-  account: ACCOUNTS[0].label,
+  account: '',
   ticker: '',
   dollar_amount: '',
   frequency: 'monthly',
@@ -22,11 +22,17 @@ const EMPTY_SCHEDULE = {
 }
 
 export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
+  const { accounts } = useAccounts()
   const [form, setForm] = useState(() =>
     schedule ? { ...schedule, end_date: schedule.end_date ?? '' } : { ...EMPTY_SCHEDULE },
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (schedule || !accounts.length) return
+    setForm((prev) => (prev.account ? prev : { ...prev, account: accounts[0].name }))
+  }, [accounts, schedule])
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -72,9 +78,9 @@ export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
             <label>
               Account
               <select value={form.account} onChange={(e) => handleChange('account', e.target.value)}>
-                {ACCOUNTS.map((a) => (
-                  <option key={a.slug} value={a.label}>
-                    {a.label}
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.name}>
+                    {a.name}
                   </option>
                 ))}
               </select>

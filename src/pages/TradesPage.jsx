@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTradeSchedules } from '../hooks/useTradeSchedules'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import HoldingsTable from '../components/HoldingsTable'
 import TradeForm from '../components/TradeForm'
 import TradeSchedulesTable from '../components/TradeSchedulesTable'
@@ -18,6 +18,7 @@ export default function TradesPage() {
   const [syncError, setSyncError] = useState(null)
   const [syncMessage, setSyncMessage] = useState(null)
 
+  const { accounts } = useAccounts()
   const { trades, loading, error, refetch, deleteTrade } = usePortfolio(accountFilter)
 
   const {
@@ -87,9 +88,9 @@ export default function TradesPage() {
           Account
           <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)}>
             <option value="All">All</option>
-            {ACCOUNTS.map((a) => (
-              <option key={a.slug} value={a.label}>
-                {a.label}
+            {accounts.map((a) => (
+              <option key={a.id} value={a.name}>
+                {a.name}
               </option>
             ))}
           </select>

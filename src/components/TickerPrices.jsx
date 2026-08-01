@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { useTickerPrices } from '../hooks/useTickerPrices'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import './TickerPrices.css'
 
 function formatCurrency(value) {
@@ -21,6 +21,7 @@ function formatTimestamp(iso) {
 export default function TickerPrices() {
   const { trades, loading: tradesLoading } = useTrades('All')
   const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
+  const { accounts } = useAccounts()
 
   const [editingTicker, setEditingTicker] = useState(null)
   const [draftPrice, setDraftPrice] = useState('')
@@ -133,9 +134,9 @@ export default function TickerPrices() {
         <thead>
           <tr>
             <th>Ticker</th>
-            {ACCOUNTS.map((account) => (
-              <th key={account.slug} className="is-held-col">
-                {account.label}
+            {accounts.map((account) => (
+              <th key={account.id} className="is-held-col">
+                {account.name}
               </th>
             ))}
             <th className="is-numeric">Current Price</th>
@@ -150,11 +151,11 @@ export default function TickerPrices() {
             return (
               <tr key={ticker}>
                 <td className="ticker-prices__ticker">{ticker}</td>
-                {ACCOUNTS.map((account) => {
-                  const isHeld = heldByTickerAccount.get(ticker)?.has(account.label)
+                {accounts.map((account) => {
+                  const isHeld = heldByTickerAccount.get(ticker)?.has(account.name)
                   return (
-                    <td key={account.slug} className="is-held-col">
-                      {isHeld && <span className="held-dot" title={`Held in ${account.label}`} />}
+                    <td key={account.id} className="is-held-col">
+                      {isHeld && <span className="held-dot" title={`Held in ${account.name}`} />}
                     </td>
                   )
                 })}

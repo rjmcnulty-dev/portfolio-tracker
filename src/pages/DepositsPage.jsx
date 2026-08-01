@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useDeposits } from '../hooks/useDeposits'
 import { useDepositSchedules } from '../hooks/useDepositSchedules'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import DepositsTable from '../components/DepositsTable'
 import DepositSchedulesTable from '../components/DepositSchedulesTable'
 import DepositForm from '../components/DepositForm'
@@ -20,6 +20,8 @@ export default function DepositsPage() {
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState(null)
   const [syncMessage, setSyncMessage] = useState(null)
+
+  const { accounts } = useAccounts()
 
   const {
     deposits,
@@ -93,9 +95,9 @@ export default function DepositsPage() {
             Account
             <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)}>
               <option value="All">All</option>
-              {ACCOUNTS.map((a) => (
-                <option key={a.slug} value={a.label}>
-                  {a.label}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.name}>
+                  {a.name}
                 </option>
               ))}
             </select>

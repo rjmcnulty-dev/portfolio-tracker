@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
-import { accountLabelFromSlug } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
+import { slugify } from '../lib/accounts'
 import KPIRow from '../components/KPIRow'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
@@ -9,9 +10,19 @@ import HoldingsTable from '../components/HoldingsTable'
 
 export default function AccountPage() {
   const { accountSlug } = useParams()
-  const accountLabel = accountLabelFromSlug(accountSlug)
+  const { accounts, loading: accountsLoading } = useAccounts()
+  const account = accounts.find((a) => slugify(a.name) === accountSlug)
+  const accountLabel = account?.name ?? 'All'
   const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio(accountLabel)
+
+  if (accountsLoading) {
+    return (
+      <div className="page">
+        <p className="page__loading">Loading account…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="page">

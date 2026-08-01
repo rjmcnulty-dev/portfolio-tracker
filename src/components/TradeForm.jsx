@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
 import './TradeForm.css'
 
 const EMPTY_TRADE = {
-  account: ACCOUNTS[0].label,
+  account: '',
   ticker: '',
   trade_type: 'BUY',
   quantity: '',
@@ -26,9 +26,17 @@ function computeCostBasis(quantity, price, fees) {
 }
 
 export default function TradeForm({ trade, onClose, onSaved }) {
+  const { accounts } = useAccounts()
   const [form, setForm] = useState(() => (trade ? { ...trade } : { ...EMPTY_TRADE }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  // Default to the first account once the list loads — it isn't available
+  // synchronously at mount, unlike the old hardcoded array.
+  useEffect(() => {
+    if (trade || !accounts.length) return
+    setForm((prev) => (prev.account ? prev : { ...prev, account: accounts[0].name }))
+  }, [accounts, trade])
 
   function handleChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -96,9 +104,9 @@ export default function TradeForm({ trade, onClose, onSaved }) {
             <label>
               Account
               <select value={form.account} onChange={(e) => handleChange('account', e.target.value)}>
-                {ACCOUNTS.map((a) => (
-                  <option key={a.slug} value={a.label}>
-                    {a.label}
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.name}>
+                    {a.name}
                   </option>
                 ))}
               </select>

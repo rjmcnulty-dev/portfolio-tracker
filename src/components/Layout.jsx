@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { ACCOUNTS } from '../lib/accounts'
+import { useAccounts } from '../hooks/useAccounts'
+import { slugify } from '../lib/accounts'
+import AddAccountForm from './AddAccountForm'
 
 function linkClass({ isActive }) {
   return `sidebar__link ${isActive ? 'is-active' : ''}`
 }
 
 export default function Layout() {
+  const { accounts, addAccount } = useAccounts()
+  const [showAddAccount, setShowAddAccount] = useState(false)
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -14,13 +20,22 @@ export default function Layout() {
           <span className="sidebar__brand-name">Portfolio Tracker</span>
         </div>
         <nav className="sidebar__nav">
-          <p className="sidebar__section-label">Accounts</p>
+          <div className="sidebar__section-header">
+            <p className="sidebar__section-label">Accounts</p>
+            <button
+              className="sidebar__add-account"
+              onClick={() => setShowAddAccount(true)}
+              title="Add account"
+            >
+              +
+            </button>
+          </div>
           <NavLink to="/" end className={linkClass}>
             All Accounts
           </NavLink>
-          {ACCOUNTS.map((account) => (
-            <NavLink key={account.slug} to={`/account/${account.slug}`} className={linkClass}>
-              {account.label}
+          {accounts.map((account) => (
+            <NavLink key={account.id} to={`/account/${slugify(account.name)}`} className={linkClass}>
+              {account.name}
             </NavLink>
           ))}
           <p className="sidebar__section-label">Tools</p>
@@ -44,6 +59,10 @@ export default function Layout() {
       <main className="app-main">
         <Outlet />
       </main>
+
+      {showAddAccount && (
+        <AddAccountForm onClose={() => setShowAddAccount(false)} onAdd={addAccount} />
+      )}
     </div>
   )
 }
