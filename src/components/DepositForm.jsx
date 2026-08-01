@@ -11,7 +11,7 @@ const EMPTY_DEPOSIT = {
 }
 
 export default function DepositForm({ deposit, onClose, onSaved }) {
-  const { accounts } = useAccounts()
+  const { accounts, error: accountsError } = useAccounts()
   const [form, setForm] = useState(() => (deposit ? { ...deposit } : { ...EMPTY_DEPOSIT }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -67,6 +67,7 @@ export default function DepositForm({ deposit, onClose, onSaved }) {
                   </option>
                 ))}
               </select>
+              {accountsError && <span className="deposit-form__error">Accounts failed to load: {accountsError}</span>}
             </label>
             <label>
               Amount

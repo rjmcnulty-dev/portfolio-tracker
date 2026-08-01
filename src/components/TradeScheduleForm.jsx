@@ -22,7 +22,7 @@ const EMPTY_SCHEDULE = {
 }
 
 export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
-  const { accounts } = useAccounts()
+  const { accounts, error: accountsError } = useAccounts()
   const [form, setForm] = useState(() =>
     schedule ? { ...schedule, end_date: schedule.end_date ?? '' } : { ...EMPTY_SCHEDULE },
   )
@@ -84,6 +84,7 @@ export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
                   </option>
                 ))}
               </select>
+              {accountsError && <span className="trade-form__error">Accounts failed to load: {accountsError}</span>}
             </label>
             <label>
               Ticker

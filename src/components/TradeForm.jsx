@@ -26,7 +26,7 @@ function computeCostBasis(quantity, price, fees) {
 }
 
 export default function TradeForm({ trade, onClose, onSaved }) {
-  const { accounts } = useAccounts()
+  const { accounts, error: accountsError } = useAccounts()
   const [form, setForm] = useState(() => (trade ? { ...trade } : { ...EMPTY_TRADE }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -110,6 +110,7 @@ export default function TradeForm({ trade, onClose, onSaved }) {
                   </option>
                 ))}
               </select>
+              {accountsError && <span className="trade-form__error">Accounts failed to load: {accountsError}</span>}
             </label>
             <label>
               Ticker

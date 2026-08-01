@@ -9,7 +9,7 @@ function linkClass({ isActive }) {
 }
 
 export default function Layout() {
-  const { accounts, addAccount } = useAccounts()
+  const { accounts, addAccount, error: accountsError } = useAccounts()
   const [showAddAccount, setShowAddAccount] = useState(false)
 
   return (
@@ -33,6 +33,7 @@ export default function Layout() {
           <NavLink to="/" end className={linkClass}>
             All Accounts
           </NavLink>
+          {accountsError && <p className="sidebar__error">Accounts failed to load: {accountsError}</p>}
           {accounts.map((account) => (
             <NavLink key={account.id} to={`/account/${slugify(account.name)}`} className={linkClass}>
               {account.name}
