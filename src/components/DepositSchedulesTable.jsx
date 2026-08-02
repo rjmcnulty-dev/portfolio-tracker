@@ -32,6 +32,7 @@ export default function DepositSchedulesTable({ schedules, showAccount = true, o
             <th>Frequency</th>
             <th>Start</th>
             <th>End</th>
+            <th>Type</th>
             <th>Status</th>
             <th>Notes</th>
             {(onEdit || onDelete) && <th></th>}
@@ -49,6 +50,7 @@ export default function DepositSchedulesTable({ schedules, showAccount = true, o
               <td>{FREQUENCY_LABELS[schedule.frequency] ?? schedule.frequency}</td>
               <td>{schedule.start_date}</td>
               <td>{schedule.end_date ?? '—'}</td>
+              <td>{schedule.deposit_type ?? '—'}</td>
               <td>
                 <span className={`source-badge ${schedule.active ? 'source-badge--recurring' : 'source-badge--manual'}`}>
                   {schedule.active ? 'Active' : 'Paused'}

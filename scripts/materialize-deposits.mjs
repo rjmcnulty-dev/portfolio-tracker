@@ -72,6 +72,7 @@ async function main() {
         account: schedule.account,
         amount: schedule.amount,
         deposit_date,
+        deposit_type: schedule.deposit_type,
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : 'Auto-generated recurring deposit',
       })

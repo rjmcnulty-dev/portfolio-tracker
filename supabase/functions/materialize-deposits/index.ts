@@ -48,6 +48,7 @@ interface Schedule {
   frequency: string;
   start_date: string;
   end_date: string | null;
+  deposit_type: string;
   notes: string | null;
 }
 
@@ -98,7 +99,14 @@ Deno.serve(async (req) => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const rows: { account: string; amount: number; deposit_date: string; schedule_id: string; notes: string }[] = [];
+  const rows: {
+    account: string;
+    amount: number;
+    deposit_date: string;
+    deposit_type: string;
+    schedule_id: string;
+    notes: string;
+  }[] = [];
 
   for (const schedule of (schedules ?? []) as Schedule[]) {
     if (schedule.start_date > today) continue;
@@ -108,6 +116,7 @@ Deno.serve(async (req) => {
         account: schedule.account,
         amount: schedule.amount,
         deposit_date,
+        deposit_type: schedule.deposit_type,
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : "Auto-generated recurring deposit",
       });

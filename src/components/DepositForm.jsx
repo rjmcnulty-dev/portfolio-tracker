@@ -3,10 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
 import './DepositForm.css'
 
+const DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
+
 const EMPTY_DEPOSIT = {
   account: '',
   amount: '',
   deposit_date: new Date().toISOString().slice(0, 10),
+  deposit_type: DEPOSIT_TYPES[0],
   notes: '',
 }
 
@@ -34,6 +37,7 @@ export default function DepositForm({ deposit, onClose, onSaved }) {
       account: form.account,
       amount: Number(form.amount),
       deposit_date: form.deposit_date,
+      deposit_type: form.deposit_type,
       notes: form.notes,
     }
 
@@ -78,6 +82,16 @@ export default function DepositForm({ deposit, onClose, onSaved }) {
                 value={form.amount}
                 onChange={(e) => handleChange('amount', e.target.value)}
               />
+            </label>
+            <label>
+              Deposit Type
+              <select value={form.deposit_type} onChange={(e) => handleChange('deposit_type', e.target.value)}>
+                {DEPOSIT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Date

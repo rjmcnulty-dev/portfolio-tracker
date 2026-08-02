@@ -10,6 +10,8 @@ const FREQUENCIES = [
   { value: 'monthly', label: 'Monthly' },
 ]
 
+const DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
+
 const EMPTY_SCHEDULE = {
   account: '',
   amount: '',
@@ -17,6 +19,7 @@ const EMPTY_SCHEDULE = {
   start_date: new Date().toISOString().slice(0, 10),
   end_date: '',
   active: true,
+  deposit_type: DEPOSIT_TYPES[0],
   notes: '',
 }
 
@@ -49,6 +52,7 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
       start_date: form.start_date,
       end_date: form.end_date || null,
       active: form.active,
+      deposit_type: form.deposit_type,
       notes: form.notes,
     }
 
@@ -116,6 +120,16 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
             <label>
               End Date (optional)
               <input type="date" value={form.end_date} onChange={(e) => handleChange('end_date', e.target.value)} />
+            </label>
+            <label>
+              Deposit Type
+              <select value={form.deposit_type} onChange={(e) => handleChange('deposit_type', e.target.value)}>
+                {DEPOSIT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Active

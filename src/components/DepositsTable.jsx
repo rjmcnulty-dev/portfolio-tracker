@@ -6,6 +6,7 @@ const COLUMNS = [
   { key: 'deposit_date', label: 'Date' },
   { key: 'account', label: 'Account', accountOnly: true },
   { key: 'amount', label: 'Amount', numeric: true, currency: true },
+  { key: 'deposit_type', label: 'Type' },
   { key: 'source', label: 'Source' },
   { key: 'notes', label: 'Notes' },
 ]

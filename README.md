@@ -193,6 +193,9 @@ create table if not exists deposit_schedules (
   start_date date not null,
   end_date date,
   active boolean not null default true,
+  deposit_type text not null default 'Cash Deposit' check (
+    deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
+  ),
   notes text,
   created_at timestamptz not null default now()
 );
@@ -210,6 +213,9 @@ create table if not exists deposits (
   account text not null references accounts (name) on update cascade,
   amount numeric not null,
   deposit_date date not null,
+  deposit_type text not null default 'Cash Deposit' check (
+    deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
+  ),
   schedule_id uuid references deposit_schedules (id) on delete set null,
   notes text,
   created_at timestamptz not null default now()
@@ -357,6 +363,21 @@ create index if not exists trade_lot_allocations_buy_idx on trade_lot_allocation
 
 alter table trade_lot_allocations enable row level security;
 create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for all using (true) with check (true);
+```
+
+**If you already have a database from before deposit types**, run this migration to add
+`deposit_type` to the existing `deposits` and `deposit_schedules` tables:
+
+```sql
+alter table deposits add column if not exists deposit_type text not null default 'Cash Deposit';
+alter table deposits add constraint deposits_type_check check (
+  deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
+);
+
+alter table deposit_schedules add column if not exists deposit_type text not null default 'Cash Deposit';
+alter table deposit_schedules add constraint deposit_schedules_type_check check (
+  deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
+);
 ```
 
 ## Daily price refresh
