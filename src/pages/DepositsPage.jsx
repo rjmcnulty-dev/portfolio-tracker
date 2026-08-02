@@ -136,6 +136,7 @@ export default function DepositsPage() {
         ) : (
           <DepositSchedulesTable
             schedules={schedules}
+            deposits={deposits}
             showAccount={accountFilter === 'All'}
             onEdit={openEditSchedule}
             onDelete={deleteSchedule}
