@@ -125,6 +125,7 @@ export default function TradesPage() {
         ) : (
           <TradeSchedulesTable
             schedules={schedules}
+            trades={trades}
             showAccount={accountFilter === 'All'}
             onEdit={openEditSchedule}
             onDelete={deleteSchedule}
