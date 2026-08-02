@@ -16,6 +16,7 @@ import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
 const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y']
+const LEVEL_COUNTS = [1, 2, 3, 4]
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -39,7 +40,7 @@ function formatEarningsDate(dateStr) {
   })
 }
 
-function ChartControls({ range, setRange, indicators }) {
+function ChartControls({ range, setRange, indicators, levelCount, setLevelCount, showLevels }) {
   return (
     <>
       <div className="watchlist-card__ranges">
@@ -66,7 +67,55 @@ function ChartControls({ range, setRange, indicators }) {
           </button>
         ))}
       </div>
+
+      {showLevels && (
+        <div className="watchlist-card__ranges">
+          <span className="watchlist-card__levels-label">Levels</span>
+          {LEVEL_COUNTS.map((n) => (
+            <button
+              key={n}
+              className={`range-btn ${levelCount === n ? 'range-btn--active' : ''}`}
+              onClick={() => setLevelCount(n)}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
     </>
+  )
+}
+
+// Support/resistance render as ReferenceLines, which Recharts' default
+// Tooltip payload doesn't include (it only reflects Line/Area/Bar series at
+// the hovered x). A custom content renderer lets the callout append them
+// as a fixed supplementary block alongside whatever's under the cursor.
+function ChartTooltip({ active, payload, label, support, resistance, showLevels }) {
+  if (!active || !payload?.length) return null
+
+  return (
+    <div className="watchlist-card__tooltip">
+      <p className="watchlist-card__tooltip-label">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey} className="watchlist-card__tooltip-row" style={{ color: entry.color }}>
+          {entry.name}: {formatCurrency(entry.value)}
+        </p>
+      ))}
+      {showLevels && (resistance.length > 0 || support.length > 0) && (
+        <div className="watchlist-card__tooltip-levels">
+          {resistance.map((level) => (
+            <p key={`res-${level.price}`} className="watchlist-card__tooltip-row" style={{ color: 'var(--red)' }}>
+              Resistance: {formatCurrency(level.price)}
+            </p>
+          ))}
+          {support.map((level) => (
+            <p key={`sup-${level.price}`} className="watchlist-card__tooltip-row" style={{ color: 'var(--green)' }}>
+              Support: {formatCurrency(level.price)}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -83,10 +132,7 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
           minTickGap={30}
         />
         <YAxis domain={['auto', 'auto']} tickFormatter={formatCurrency} stroke="var(--text-muted)" fontSize={11} width={70} />
-        <Tooltip
-          formatter={(value, name) => [formatCurrency(value), name]}
-          contentStyle={{ background: 'var(--navy-mid)', border: 'none', borderRadius: 8, color: '#fff' }}
-        />
+        <Tooltip content={<ChartTooltip support={support} resistance={resistance} showLevels={showLevels} />} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {showLevels &&
           resistance.map((level) => (
@@ -145,6 +191,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [showSMA50, setShowSMA50] = useState(true)
   const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
+  const [levelCount, setLevelCount] = useState(2)
   const [expanded, setExpanded] = useState(false)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
@@ -162,7 +209,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const sma20 = useMemo(() => computeSMA(series, 20), [series])
   const sma50 = useMemo(() => computeSMA(series, 50), [series])
   const sma200 = useMemo(() => computeSMA(series, 200), [series])
-  const { support, resistance } = useMemo(() => findSupportResistance(series), [series])
+  const { support, resistance } = useMemo(() => findSupportResistance(series, levelCount), [series, levelCount])
 
   const chartData = useMemo(
     () =>
@@ -233,7 +280,14 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
         </div>
       </div>
 
-      <ChartControls range={range} setRange={setRange} indicators={indicatorToggles} />
+      <ChartControls
+        range={range}
+        setRange={setRange}
+        indicators={indicatorToggles}
+        levelCount={levelCount}
+        setLevelCount={setLevelCount}
+        showLevels={showLevels}
+      />
 
       {error && <p className="watchlist-card__error">{error}</p>}
       {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={240} />}
@@ -273,7 +327,14 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
               </button>
             </div>
 
-            <ChartControls range={range} setRange={setRange} indicators={indicatorToggles} />
+            <ChartControls
+        range={range}
+        setRange={setRange}
+        indicators={indicatorToggles}
+        levelCount={levelCount}
+        setLevelCount={setLevelCount}
+        showLevels={showLevels}
+      />
 
             {error && <p className="watchlist-card__error">{error}</p>}
             {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={460} />}
