@@ -8,13 +8,25 @@ import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
 
+// Every account page matches the same route (/account/:accountSlug), so
+// React Router reuses one AccountPage instance across tabs instead of
+// remounting. Two things have to hold to avoid ever showing the wrong
+// account's numbers:
+//
+// 1. usePortfolio must never be called with 'All' as a stand-in while we
+//    don't yet know the real account name (e.g. while useAccounts is still
+//    loading) — that used to kick off an unfiltered fetch that could
+//    resolve *after* the correctly-scoped one and silently overwrite it
+//    with cross-account data (the fetch hooks now also guard against this
+//    directly, but not calling usePortfolio with the wrong account at all
+//    is the real fix — this wrapper resolves accounts and the account name
+//    first, and only mounts AccountPageContent once both are known).
+// 2. Keying AccountPageContent by accountSlug forces a full remount on every
+//    tab switch, so hook state always starts fresh instead of carrying over
+//    from whichever account was previously showing.
 export default function AccountPage() {
   const { accountSlug } = useParams()
   const { accounts, loading: accountsLoading } = useAccounts()
-  const account = accounts.find((a) => slugify(a.name) === accountSlug)
-  const accountLabel = account?.name ?? 'All'
-  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
-    usePortfolio(accountLabel)
 
   if (accountsLoading) {
     return (
@@ -23,6 +35,16 @@ export default function AccountPage() {
       </div>
     )
   }
+
+  const account = accounts.find((a) => slugify(a.name) === accountSlug)
+  const accountLabel = account?.name ?? 'All'
+
+  return <AccountPageContent key={accountSlug} accountLabel={accountLabel} />
+}
+
+function AccountPageContent({ accountLabel }) {
+  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
+    usePortfolio(accountLabel)
 
   return (
     <div className="page">

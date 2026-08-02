@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useTrades(account = 'All') {
@@ -6,7 +6,15 @@ export function useTrades(account = 'All') {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Guards against out-of-order responses: if account changes again (or a
+  // manual refetch overlaps an in-flight auto-fetch) before this call's
+  // response arrives, a later call's result must win — otherwise a slower,
+  // stale request can resolve last and silently overwrite correct data with
+  // the wrong account's trades.
+  const latestRequestId = useRef(0)
+
   const fetchTrades = useCallback(async () => {
+    const requestId = ++latestRequestId.current
     setLoading(true)
     setError(null)
 
@@ -16,6 +24,8 @@ export function useTrades(account = 'All') {
     }
 
     const { data, error: fetchError } = await query
+
+    if (requestId !== latestRequestId.current) return
 
     if (fetchError) {
       setError(fetchError.message)

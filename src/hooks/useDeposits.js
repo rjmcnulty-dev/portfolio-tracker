@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useDeposits(account = 'All') {
@@ -6,7 +6,15 @@ export function useDeposits(account = 'All') {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Guards against out-of-order responses: if account changes again before
+  // this call's response arrives, a later call's result must win — otherwise
+  // a slower, stale request (e.g. an unfiltered 'All' fetch kicked off
+  // before the real account was known) can resolve last and silently
+  // overwrite correct data with the wrong account's deposits.
+  const latestRequestId = useRef(0)
+
   const fetchDeposits = useCallback(async () => {
+    const requestId = ++latestRequestId.current
     setLoading(true)
 
     let query = supabase.from('deposits').select('*').order('deposit_date', { ascending: false })
@@ -15,6 +23,8 @@ export function useDeposits(account = 'All') {
     }
 
     const { data, error: fetchError } = await query
+
+    if (requestId !== latestRequestId.current) return
 
     if (fetchError) {
       setError(fetchError.message)

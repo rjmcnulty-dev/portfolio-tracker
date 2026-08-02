@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useDepositSchedules(account = 'All') {
@@ -6,7 +6,13 @@ export function useDepositSchedules(account = 'All') {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Guards against out-of-order responses — see useDeposits.js for why this
+  // matters (a slower, stale request for a different account can otherwise
+  // resolve last and silently overwrite correct data).
+  const latestRequestId = useRef(0)
+
   const fetchSchedules = useCallback(async () => {
+    const requestId = ++latestRequestId.current
     setLoading(true)
 
     let query = supabase.from('deposit_schedules').select('*').order('start_date', { ascending: false })
@@ -15,6 +21,8 @@ export function useDepositSchedules(account = 'All') {
     }
 
     const { data, error: fetchError } = await query
+
+    if (requestId !== latestRequestId.current) return
 
     if (fetchError) {
       setError(fetchError.message)
