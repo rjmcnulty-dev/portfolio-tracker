@@ -3,6 +3,7 @@ import { useTrades } from './useTrades'
 import { useTickerPrices } from './useTickerPrices'
 import { useDeposits } from './useDeposits'
 import { supabase } from '../lib/supabase'
+import { isBuyTrade } from '../lib/tradeTypes'
 
 export function usePortfolio(account = 'All') {
   const {
@@ -62,7 +63,7 @@ export function usePortfolio(account = 'All') {
   // two new remaining_quantity/remaining_cost_basis fields for holdings.
   const trades = useMemo(() => {
     return rawTrades.map((trade) => {
-      if (trade.trade_type !== 'BUY') return trade
+      if (!isBuyTrade(trade.trade_type)) return trade
 
       const originalQty = Number(trade.quantity) || 0
       const closedQty = closedByBuyId.get(trade.id) || 0
@@ -87,7 +88,7 @@ export function usePortfolio(account = 'All') {
   const totals = useMemo(() => {
     return trades.reduce(
       (acc, trade) => {
-        if (trade.trade_type === 'BUY') {
+        if (isBuyTrade(trade.trade_type)) {
           acc.invested += Number(trade.remaining_cost_basis) || 0
           acc.marketValue += Number(trade.market_value) || 0
           acc.unrealizedPnl += Number(trade.unrealized_pnl) || 0
@@ -118,7 +119,7 @@ export function usePortfolio(account = 'All') {
       const quantity = Number(trade.quantity) || 0
       const price = Number(trade.price) || 0
       const fees = Number(trade.fees) || 0
-      if (trade.trade_type === 'BUY') return sum - (Number(trade.cost_basis) || 0)
+      if (isBuyTrade(trade.trade_type)) return sum - (Number(trade.cost_basis) || 0)
       if (trade.trade_type === 'SELL') return sum + (quantity * price - fees)
       return sum
     }, 0)
@@ -159,7 +160,7 @@ export function usePortfolio(account = 'All') {
   const holdings = useMemo(() => {
     const byTicker = new Map()
     for (const trade of trades) {
-      if (trade.trade_type !== 'BUY') continue
+      if (!isBuyTrade(trade.trade_type)) continue
       const remainingQty = Number(trade.remaining_quantity) || 0
       if (remainingQty <= 0) continue
 

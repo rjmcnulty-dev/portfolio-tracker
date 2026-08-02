@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import { useAccounts } from '../hooks/useAccounts'
+import { isBuyTrade } from '../lib/tradeTypes'
 import './TickerPrices.css'
 
 function formatCurrency(value) {
@@ -44,7 +45,7 @@ export default function TickerPrices() {
   const heldByTickerAccount = useMemo(() => {
     const map = new Map()
     for (const trade of trades) {
-      if (trade.trade_type !== 'BUY') continue
+      if (!isBuyTrade(trade.trade_type)) continue
       if (!map.has(trade.ticker)) map.set(trade.ticker, new Set())
       map.get(trade.ticker).add(trade.account)
     }

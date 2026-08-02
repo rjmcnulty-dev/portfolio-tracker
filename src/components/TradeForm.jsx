@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
 import { useTradeLotAllocations } from '../hooks/useTradeLotAllocations'
+import { TRADE_TYPES } from '../lib/tradeTypes'
 import './TradeForm.css'
 
 const EMPTY_TRADE = {
@@ -258,8 +259,11 @@ export default function TradeForm({ trade, onClose, onSaved }) {
             <label>
               Type
               <select value={form.trade_type} onChange={(e) => handleChange('trade_type', e.target.value)}>
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
+                {TRADE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
               </select>
             </label>
             <label>

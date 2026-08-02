@@ -96,7 +96,7 @@ create table if not exists trades (
   id uuid primary key default gen_random_uuid(),
   account text not null references accounts (name) on update cascade,
   ticker text not null,
-  trade_type text not null check (trade_type in ('BUY', 'SELL')),
+  trade_type text not null check (trade_type in ('BUY', 'SELL', 'Scheduled Buy')),
   quantity numeric not null,
   price numeric not null,
   trade_date date not null,
@@ -380,6 +380,18 @@ alter table deposit_schedules add constraint deposit_schedules_type_check check 
 );
 ```
 
+**If you already have a database from before "Scheduled Buy"**, run this migration to
+allow it as a `trades.trade_type` value (auto-materialized recurring trades use it instead
+of `'BUY'`, purely so they're visually distinguishable — everywhere that cares whether a
+trade opened a position treats the two identically):
+
+```sql
+alter table trades drop constraint if exists trades_trade_type_check;
+alter table trades add constraint trades_trade_type_check check (
+  trade_type in ('BUY', 'SELL', 'Scheduled Buy')
+);
+```
+
 ## Daily price refresh
 
 `scripts/fetch-prices.mjs` is a small Node script that:
@@ -514,10 +526,14 @@ AAPL"), not a fixed share count — a classic dollar-cost-average setup.
 
 The key difference from deposits: a trade needs a *price*. At materialization time (not
 schedule-creation time), the job looks up the ticker's current price from `ticker_prices`
-and computes `quantity = dollar_amount / price`, then inserts a `trades` row (`BUY`,
-`schedule_id` set, `cost_basis` = the fixed dollar amount). If there's no cached price yet
-for that ticker, that schedule is skipped for the run and picked up automatically next
-time a price exists — it never blocks other schedules or errors out the whole batch.
+and computes `quantity = dollar_amount / price`, then inserts a `trades` row
+(`trade_type` = `'Scheduled Buy'`, `schedule_id` set, `cost_basis` = the fixed dollar
+amount). `'Scheduled Buy'` behaves identically to `'BUY'` everywhere that matters (holdings,
+cost basis, cash position, eligible SELL lots) — it's a separate value purely so recurring
+trades are visually distinguishable from manually entered ones in the Type column. If
+there's no cached price yet for that ticker, that schedule is skipped for the run and
+picked up automatically next time a price exists — it never blocks other schedules or
+errors out the whole batch.
 
 Same two materialization paths as prices/deposits:
 

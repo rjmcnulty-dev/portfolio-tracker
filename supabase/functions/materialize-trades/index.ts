@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       rows.push({
         account: schedule.account,
         ticker: schedule.ticker,
-        trade_type: "BUY",
+        trade_type: "Scheduled Buy",
         quantity,
         price,
         trade_date,
