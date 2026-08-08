@@ -199,7 +199,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesError, setNotesError] = useState(null)
 
-  const { series, nextEarningsDate, companyName, loading, error } = useStockQuote(item.ticker, range)
+  const { series, nextEarningsDate, companyName, loading, error, refresh } = useStockQuote(item.ticker, range)
 
   const latestPrice = series.length ? series[series.length - 1].close : null
   const firstPrice = series.length ? series[0].close : null
@@ -271,6 +271,9 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
           )}
         </div>
         <div className="watchlist-card__header-actions">
+          <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
           <button className="btn-link" onClick={() => setExpanded(true)}>
             Expand
           </button>
@@ -322,9 +325,14 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
                 <span className="watchlist-card__ticker">{item.ticker}</span>
                 {companyName && <span className="watchlist-card__company">{companyName}</span>}
               </div>
-              <button className="btn-link" onClick={() => setExpanded(false)}>
-                Close
-              </button>
+              <div className="watchlist-card__header-actions">
+                <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
+                  {loading ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <button className="btn-link" onClick={() => setExpanded(false)}>
+                  Close
+                </button>
+              </div>
             </div>
 
             <ChartControls

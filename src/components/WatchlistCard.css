@@ -40,8 +40,22 @@
 
 .watchlist-card__header-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.watchlist-card__refresh-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: var(--light-blue);
+  border-color: var(--light-blue);
+  color: var(--navy-dark);
+}
+
+.watchlist-card__refresh-btn:hover:not(:disabled) {
+  background: #5cc4f0;
+  border-color: #5cc4f0;
 }
 
 .watchlist-modal {

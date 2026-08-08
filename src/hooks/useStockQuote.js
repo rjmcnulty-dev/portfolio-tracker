@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export function useStockQuote(ticker, range) {
@@ -16,55 +16,68 @@ export function useStockQuote(ticker, range) {
   // API call at all.
   const cacheRef = useRef(new Map())
 
+  // Guards against out-of-order responses (e.g. a manual refresh() overlaps
+  // a range change) — only the most recently started load is allowed to
+  // apply its result.
+  const latestRequestId = useRef(0)
+
+  const load = useCallback(async (currentTicker, currentRange) => {
+    if (!currentTicker) return
+    const requestId = ++latestRequestId.current
+    const key = `${currentTicker}:${currentRange}`
+
+    setLoading(true)
+    setError(null)
+
+    let entry = cacheRef.current.get(key)
+    if (!entry) {
+      entry = supabase.functions
+        .invoke('watchlist-quote', { body: { ticker: currentTicker, range: currentRange } })
+        .then(({ data, error: invokeError }) => {
+          if (invokeError) throw invokeError
+          if (data?.error) throw new Error(data.error)
+          return {
+            series: data.series ?? [],
+            nextEarningsDate: data.nextEarningsDate ?? null,
+            companyName: data.companyName ?? null,
+          }
+        })
+        .catch((err) => {
+          cacheRef.current.delete(key)
+          throw err
+        })
+      cacheRef.current.set(key, entry)
+    }
+
+    try {
+      const result = await entry
+      if (requestId !== latestRequestId.current) return
+      setSeries(result.series)
+      setNextEarningsDate(result.nextEarningsDate)
+      setCompanyName(result.companyName)
+    } catch (err) {
+      if (requestId !== latestRequestId.current) return
+      setError(err.message)
+    } finally {
+      if (requestId === latestRequestId.current) setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
+    load(ticker, range)
+  }, [ticker, range, load])
+
+  // Manual per-ticker refresh: drop every cached range for this ticker (the
+  // underlying price data changed, so a previously-viewed range's cached
+  // series is stale too, not just the one on screen right now) and reload
+  // the currently selected range.
+  const refresh = useCallback(() => {
     if (!ticker) return
-
-    const key = `${ticker}:${range}`
-    let ignore = false
-
-    async function load() {
-      setLoading(true)
-      setError(null)
-
-      let entry = cacheRef.current.get(key)
-      if (!entry) {
-        entry = supabase.functions
-          .invoke('watchlist-quote', { body: { ticker, range } })
-          .then(({ data, error: invokeError }) => {
-            if (invokeError) throw invokeError
-            if (data?.error) throw new Error(data.error)
-            return {
-              series: data.series ?? [],
-              nextEarningsDate: data.nextEarningsDate ?? null,
-              companyName: data.companyName ?? null,
-            }
-          })
-          .catch((err) => {
-            cacheRef.current.delete(key)
-            throw err
-          })
-        cacheRef.current.set(key, entry)
-      }
-
-      try {
-        const result = await entry
-        if (ignore) return
-        setSeries(result.series)
-        setNextEarningsDate(result.nextEarningsDate)
-        setCompanyName(result.companyName)
-      } catch (err) {
-        if (ignore) return
-        setError(err.message)
-      } finally {
-        if (!ignore) setLoading(false)
-      }
+    for (const key of [...cacheRef.current.keys()]) {
+      if (key.startsWith(`${ticker}:`)) cacheRef.current.delete(key)
     }
+    load(ticker, range)
+  }, [ticker, range, load])
 
-    load()
-    return () => {
-      ignore = true
-    }
-  }, [ticker, range])
-
-  return { series, nextEarningsDate, companyName, loading, error }
+  return { series, nextEarningsDate, companyName, loading, error, refresh }
 }
