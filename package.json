@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "prices:fetch": "node scripts/fetch-prices.mjs",
+    "portfolio:backfill": "node scripts/backfill-portfolio-history.mjs",
     "deposits:materialize": "node scripts/materialize-deposits.mjs",
     "trades:materialize": "node scripts/materialize-trades.mjs"
   },

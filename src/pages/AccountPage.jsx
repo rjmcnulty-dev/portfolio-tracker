@@ -3,6 +3,7 @@ import { usePortfolio } from '../hooks/usePortfolio'
 import { useAccounts } from '../hooks/useAccounts'
 import { slugify } from '../lib/accounts'
 import KPIRow from '../components/KPIRow'
+import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
@@ -59,6 +60,7 @@ function AccountPageContent({ accountLabel }) {
       ) : (
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
+          <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

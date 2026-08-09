@@ -65,9 +65,10 @@ tickers you don't hold — price chart (1D through 1Y), next earnings date, and 
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the ten tables the app reads
+Run the following in the Supabase SQL editor. It creates the twelve tables the app reads
 and writes: `accounts`, `trades`, `trade_lot_allocations`, `tax_settings`, `roth_conversions`,
-`ticker_prices`, `deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
+`ticker_prices`, `portfolio_value_history`, `account_value_history`, `deposit_schedules`,
+`deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -180,6 +181,43 @@ create table if not exists ticker_prices (
 );
 
 -- ─────────────────────────────────────────────
+-- portfolio_value_history: one row per day, total
+-- account value (cash position + market value of
+-- open holdings) across every account that day.
+-- Written going forward by scripts/fetch-prices.mjs
+-- and the refresh-prices Edge Function's full-refresh
+-- path; historical rows before this feature shipped
+-- are populated once via
+-- scripts/backfill-portfolio-history.mjs (see
+-- "Portfolio value history" below).
+-- ─────────────────────────────────────────────
+create table if not exists portfolio_value_history (
+  snapshot_date date primary key,
+  total_value numeric not null,
+  created_at timestamptz not null default now()
+);
+
+-- ─────────────────────────────────────────────
+-- account_value_history: same idea as
+-- portfolio_value_history, but one row per
+-- (account, day) instead of a single combined
+-- total — powers the same chart on each account
+-- page. A separate table rather than an 'All'
+-- sentinel row in portfolio_value_history because
+-- 'All' isn't a real row in `accounts` and would
+-- break the account FK below.
+-- ─────────────────────────────────────────────
+create table if not exists account_value_history (
+  account text not null references accounts (name) on update cascade,
+  snapshot_date date not null,
+  total_value numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (account, snapshot_date)
+);
+
+create index if not exists account_value_history_account_idx on account_value_history (account);
+
+-- ─────────────────────────────────────────────
 -- deposit_schedules: recurring deposit rules
 -- (e.g. "$500/month into Roth IRA"). Materialized
 -- into `deposits` by scripts/materialize-deposits.mjs
@@ -288,6 +326,8 @@ alter table trade_lot_allocations enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
+alter table portfolio_value_history enable row level security;
+alter table account_value_history enable row level security;
 alter table deposit_schedules enable row level security;
 alter table deposits enable row level security;
 alter table trade_schedules enable row level security;
@@ -299,6 +339,8 @@ create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for 
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
+create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
+create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
 create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
 create policy "Allow all on deposits" on deposits for all using (true) with check (true);
 create policy "Allow all on trade_schedules" on trade_schedules for all using (true) with check (true);
@@ -392,6 +434,57 @@ alter table trades add constraint trades_trade_type_check check (
 );
 ```
 
+**If you already have a database from before the portfolio value chart**, run this
+migration to add `portfolio_value_history`:
+
+```sql
+create table if not exists portfolio_value_history (
+  snapshot_date date primary key,
+  total_value numeric not null,
+  created_at timestamptz not null default now()
+);
+
+alter table portfolio_value_history enable row level security;
+create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
+```
+
+**If you already have a database from before per-account value charts**, run this
+migration to add `account_value_history`:
+
+```sql
+create table if not exists account_value_history (
+  account text not null references accounts (name) on update cascade,
+  snapshot_date date not null,
+  total_value numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (account, snapshot_date)
+);
+
+create index if not exists account_value_history_account_idx on account_value_history (account);
+
+alter table account_value_history enable row level security;
+create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
+```
+
+Then run `npm run portfolio:backfill` once (see "Portfolio value history" below) — it
+populates both tables in the same pass, so if you already ran it before per-account charts
+existed, run it again to fill in `account_value_history` (re-writing `portfolio_value_history`
+with the same values is harmless, just wasted API credits).
+
+**If you already have both tables from before the value chart included cash**, the
+column that used to be `market_value` (open-holdings value only) is now `total_value`
+(cash position + open-holdings value — see "Portfolio value history" below for why).
+Rename it and re-run the backfill to recompute the actual values, not just the column name:
+
+```sql
+alter table portfolio_value_history rename column market_value to total_value;
+alter table account_value_history rename column market_value to total_value;
+```
+
+```bash
+npm run portfolio:backfill
+```
+
 ## Daily price refresh
 
 `scripts/fetch-prices.mjs` is a small Node script that:
@@ -427,6 +520,53 @@ For the scheduled workflow to run, add `TWELVE_DATA_API_KEY` as a repository sec
 `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` secrets for the Supabase connection. Get a
 free API key at [twelvedata.com](https://twelvedata.com/). Never prefix it `VITE_` — that
 would bundle it into the client-side JS and expose it publicly.
+
+## Portfolio value history
+
+The **Portfolio Value** chart — Daily/Monthly/Yearly/All Time — appears on the Dashboard
+(`/`, all-accounts total) and on each account page (that account's total only). Nothing
+computes this on the fly at view time; both tables are written by the same two jobs that
+already refresh prices:
+
+- `scripts/fetch-prices.mjs` (the daily scheduled job) upserts today's row(s) right after
+  updating `ticker_prices`, using the prices it just fetched — one row into
+  `portfolio_value_history` (all accounts combined) and one row per account into
+  `account_value_history`.
+- The `refresh-prices` Edge Function does the same, but only on a *full* refresh (the
+  **Update All Prices** button) — the per-ticker **Auto Update** button on the Prices page
+  doesn't have prices for the rest of your holdings, so it can't produce a meaningful
+  snapshot and skips writing one.
+
+`total_value` is the whole account, not just open positions — it's **cash position +
+market value of holdings**, the same two numbers KPIRow shows separately, added together:
+
+```
+total_value = (deposits − cost of open BUY lots + SELL proceeds)   [cash position]
+            + Σ (open quantity × that day's price)                  [holdings value]
+```
+
+computed once across everything for `portfolio_value_history`, and again per account
+(using only that account's deposits/trades) for `account_value_history`.
+
+**Backfilling history from before this feature existed** is a separate, one-time step —
+`scripts/backfill-portfolio-history.mjs` fetches each held ticker's full daily price
+history from Twelve Data, then replays `deposits` and `trades` in date order to
+reconstruct both the running cash position and open holdings (overall and per account) on
+every day since your first trade, and writes one row per day up through yesterday into
+both tables (today's row always comes from the regular daily job instead, so the two paths
+never disagree about "today"). Run it once, after creating both tables:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_ANON_KEY=your_anon_key \
+TWELVE_DATA_API_KEY=your_twelve_data_key \
+npm run portfolio:backfill
+```
+
+It's rate-limited the same way as the price-refresh scripts (8 Twelve Data credits/minute),
+so it can take a few minutes with more than a handful of tickers. A day where an open
+position's ticker has no price data yet (e.g. a brand-new listing) is skipped rather than
+written as a misleading $0 — the chart will just have a gap there.
 
 ## On-demand price refresh (Edge Function)
 

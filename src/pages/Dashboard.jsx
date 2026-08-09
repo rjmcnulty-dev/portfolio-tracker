@@ -1,5 +1,6 @@
 import { usePortfolio } from '../hooks/usePortfolio'
 import KPIRow from '../components/KPIRow'
+import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
@@ -22,6 +23,7 @@ export default function Dashboard() {
       ) : (
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
+          <PortfolioValueChart />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />
