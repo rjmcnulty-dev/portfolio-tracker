@@ -10,10 +10,10 @@ const COLUMNS = [
   { key: 'ticker', label: 'Ticker' },
   { key: 'trade_type', label: 'Type' },
   { key: 'quantity', label: 'Qty', numeric: true },
-  { key: 'price', label: 'Price', numeric: true, currency: true },
+  { key: 'price', label: 'Price', numeric: true, currency: true, decimals: 3 },
   { key: 'fees', label: 'Fees', numeric: true, currency: true },
   { key: 'cost_basis', label: 'Cost Basis', numeric: true, currency: true },
-  { key: 'market_price', label: 'Mkt Price', numeric: true, currency: true },
+  { key: 'market_price', label: 'Mkt Price', numeric: true, currency: true, decimals: 3 },
   { key: 'market_value', label: 'Mkt Value', numeric: true, currency: true },
   { key: 'realized_pnl', label: 'Realized', numeric: true, currency: true, pnl: true },
   { key: 'unrealized_pnl', label: 'Unrealized', numeric: true, currency: true, pnl: true },
@@ -40,10 +40,15 @@ function loadVisibleKeys() {
   }
 }
 
-function formatCurrency(value) {
+function formatCurrency(value, decimals = 2) {
   const num = Number(value)
   if (Number.isNaN(num)) return '—'
-  return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  return num.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 }
 
 function washSaleClass(risk) {
@@ -169,7 +174,7 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
                     )
                   }
                   const raw = trade[col.key]
-                  const display = col.currency ? formatCurrency(raw) : raw ?? '—'
+                  const display = col.currency ? formatCurrency(raw, col.decimals) : raw ?? '—'
                   const cellClass = col.pnl ? (Number(raw) > 0 ? 'is-positive' : Number(raw) < 0 ? 'is-negative' : '') : ''
                   return (
                     <td key={col.key} className={`${col.numeric ? 'is-numeric' : ''} ${cellClass}`}>
