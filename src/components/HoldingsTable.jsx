@@ -24,6 +24,8 @@ const COLUMNS = [
 
 const STORAGE_KEY = 'portfolio-tracker:holdings-table-columns'
 const DEFAULT_VISIBLE_KEYS = COLUMNS.map((c) => c.key)
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 'All']
+const DEFAULT_PAGE_SIZE = 25
 
 function loadVisibleKeys() {
   try {
@@ -73,6 +75,8 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
   const [deleteError, setDeleteError] = useState(null)
   const [visibleKeys, setVisibleKeys] = useState(loadVisibleKeys)
   const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleKeys))
@@ -101,6 +105,26 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
     return rows
   }, [trades, sortKey, sortDir])
 
+  const pageCount = pageSize === 'All' ? 1 : Math.max(1, Math.ceil(sorted.length / pageSize))
+
+  // Keeps the current page in range whenever the page size, sort, or
+  // underlying trade list changes (e.g. a filter or delete shrinks the
+  // list out from under whatever page was showing).
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, pageCount))
+  }, [pageCount])
+
+  const paginated = useMemo(() => {
+    if (pageSize === 'All') return sorted
+    const start = (page - 1) * pageSize
+    return sorted.slice(start, start + pageSize)
+  }, [sorted, page, pageSize])
+
+  function handlePageSizeChange(value) {
+    setPageSize(value === 'All' ? 'All' : Number(value))
+    setPage(1)
+  }
+
   async function handleConfirmDelete() {
     const trade = confirmingTrade
     setConfirmingTrade(null)
@@ -123,6 +147,21 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
   return (
     <div className="holdings-table-wrap">
       <div className="holdings-table__toolbar">
+        <div className="holdings-table__toolbar-group">
+          <label className="holdings-table__page-size">
+            Show
+            <select value={pageSize} onChange={(e) => handlePageSizeChange(e.target.value)}>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="holdings-table__total-count">
+            {trades.length} total {trades.length === 1 ? 'entry' : 'entries'}
+          </span>
+        </div>
         <button className="btn btn--ghost" onClick={() => setShowColumnPicker(true)}>
           Columns
         </button>
@@ -146,7 +185,7 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((trade) => (
+            {paginated.map((trade) => (
               <tr key={trade.id}>
                 {columns.map((col) => {
                   if (col.key === 'wash_sale_risk') {
@@ -206,6 +245,25 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
             ))}
           </tbody>
         </table>
+      )}
+
+      {trades.length > 0 && pageSize !== 'All' && pageCount > 1 && (
+        <div className="holdings-table__pagination">
+          <span className="holdings-table__pagination-summary">
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} of {sorted.length}
+          </span>
+          <div className="holdings-table__pagination-controls">
+            <button className="btn btn--ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </button>
+            <span className="holdings-table__pagination-page">
+              Page {page} of {pageCount}
+            </span>
+            <button className="btn btn--ghost" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </button>
+          </div>
+        </div>
       )}
 
       {confirmingTrade && (

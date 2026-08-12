@@ -116,8 +116,59 @@
 
 .holdings-table__toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: 10px 14px;
+}
+
+.holdings-table__toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.holdings-table__page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.holdings-table__page-size select {
+  padding: 4px 8px;
+}
+
+.holdings-table__total-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.holdings-table__pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.holdings-table__pagination-summary {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.holdings-table__pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.holdings-table__pagination-page {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .column-picker__list {
