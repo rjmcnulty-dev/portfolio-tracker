@@ -11,7 +11,7 @@ export function useAccounts() {
     const { data, error: fetchError } = await supabase
       .from('accounts')
       .select('*')
-      .order('created_at', { ascending: true })
+      .order('sort_order', { ascending: true })
 
     if (fetchError) {
       setError(fetchError.message)
@@ -30,11 +30,47 @@ export function useAccounts() {
     async (name) => {
       const trimmed = name.trim()
       if (!trimmed) throw new Error('Account name is required')
-      const { error: insertError } = await supabase.from('accounts').insert({ name: trimmed })
+
+      // Append at the end of the current order rather than relying on the
+      // column default (0), which would put every new account first.
+      const { data: lastAccount, error: lastError } = await supabase
+        .from('accounts')
+        .select('sort_order')
+        .order('sort_order', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (lastError) throw lastError
+      const nextOrder = (lastAccount?.sort_order ?? -1) + 1
+
+      const { error: insertError } = await supabase.from('accounts').insert({ name: trimmed, sort_order: nextOrder })
       if (insertError) throw insertError
       await fetchAccounts()
     },
     [fetchAccounts],
+  )
+
+  // Swaps sort_order with the adjacent account so the move is a single
+  // transposition rather than renumbering the whole list.
+  const moveAccount = useCallback(
+    async (id, direction) => {
+      const index = accounts.findIndex((a) => a.id === id)
+      if (index === -1) return
+      const swapIndex = direction === 'up' ? index - 1 : index + 1
+      if (swapIndex < 0 || swapIndex >= accounts.length) return
+
+      const current = accounts[index]
+      const neighbor = accounts[swapIndex]
+
+      const [{ error: errorA }, { error: errorB }] = await Promise.all([
+        supabase.from('accounts').update({ sort_order: neighbor.sort_order }).eq('id', current.id),
+        supabase.from('accounts').update({ sort_order: current.sort_order }).eq('id', neighbor.id),
+      ])
+      if (errorA) throw errorA
+      if (errorB) throw errorB
+
+      await fetchAccounts()
+    },
+    [accounts, fetchAccounts],
   )
 
   const deleteAccount = useCallback(
@@ -71,5 +107,5 @@ export function useAccounts() {
     [fetchAccounts],
   )
 
-  return { accounts, loading, error, addAccount, deleteAccount, refetch: fetchAccounts }
+  return { accounts, loading, error, addAccount, deleteAccount, moveAccount, refetch: fetchAccounts }
 }

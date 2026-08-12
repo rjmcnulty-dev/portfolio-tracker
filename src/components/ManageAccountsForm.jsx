@@ -3,13 +3,15 @@ import ConfirmDialog from './ConfirmDialog'
 import './TradeForm.css'
 import './ManageAccountsForm.css'
 
-export default function ManageAccountsForm({ accounts, onClose, onAdd, onDelete }) {
+export default function ManageAccountsForm({ accounts, onClose, onAdd, onDelete, onMove }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [addError, setAddError] = useState(null)
   const [confirmingAccount, setConfirmingAccount] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteError, setDeleteError] = useState(null)
+  const [movingId, setMovingId] = useState(null)
+  const [moveError, setMoveError] = useState(null)
 
   async function handleAdd(event) {
     event.preventDefault()
@@ -23,6 +25,18 @@ export default function ManageAccountsForm({ accounts, onClose, onAdd, onDelete 
       setAddError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleMove(account, direction) {
+    setMovingId(account.id)
+    setMoveError(null)
+    try {
+      await onMove(account.id, direction)
+    } catch (err) {
+      setMoveError(err.message)
+    } finally {
+      setMovingId(null)
     }
   }
 
@@ -48,9 +62,31 @@ export default function ManageAccountsForm({ accounts, onClose, onAdd, onDelete 
 
         {accounts.length ? (
           <ul className="manage-accounts__list">
-            {accounts.map((account) => (
+            {accounts.map((account, index) => (
               <li key={account.id} className="manage-accounts__item">
-                <span>{account.name}</span>
+                <div className="manage-accounts__item-main">
+                  <div className="manage-accounts__reorder">
+                    <button
+                      type="button"
+                      className="manage-accounts__reorder-btn"
+                      disabled={index === 0 || movingId === account.id}
+                      onClick={() => handleMove(account, 'up')}
+                      aria-label={`Move ${account.name} up`}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      className="manage-accounts__reorder-btn"
+                      disabled={index === accounts.length - 1 || movingId === account.id}
+                      onClick={() => handleMove(account, 'down')}
+                      aria-label={`Move ${account.name} down`}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                  <span className="manage-accounts__name">{account.name}</span>
+                </div>
                 <button
                   type="button"
                   className="btn-link btn-link--danger"
@@ -65,6 +101,7 @@ export default function ManageAccountsForm({ accounts, onClose, onAdd, onDelete 
         ) : (
           <p className="manage-accounts__empty">No accounts yet.</p>
         )}
+        {moveError && <p className="trade-form__error">{moveError}</p>}
         {deleteError && <p className="trade-form__error">{deleteError}</p>}
 
         <form className="trade-form" onSubmit={handleAdd}>

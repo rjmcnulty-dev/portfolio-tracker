@@ -83,11 +83,12 @@ create extension if not exists "pgcrypto";
 create table if not exists accounts (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
-insert into accounts (name)
-values ('Robinhood'), ('Traditional IRA'), ('Roth IRA')
+insert into accounts (name, sort_order)
+values ('Robinhood', 0), ('Traditional IRA', 1), ('Roth IRA', 2)
 on conflict (name) do nothing;
 
 -- ─────────────────────────────────────────────
@@ -483,6 +484,21 @@ alter table account_value_history rename column market_value to total_value;
 
 ```bash
 npm run portfolio:backfill
+```
+
+**If you already have a database from before accounts were reorderable**, run this
+migration to add `sort_order`, backfilled from each account's existing `created_at` order
+so nothing visibly reshuffles until you actually reorder something:
+
+```sql
+alter table accounts add column if not exists sort_order integer;
+
+update accounts set sort_order = ranked.rn - 1
+from (select id, row_number() over (order by created_at asc) as rn from accounts) ranked
+where accounts.id = ranked.id and accounts.sort_order is null;
+
+alter table accounts alter column sort_order set not null;
+alter table accounts alter column sort_order set default 0;
 ```
 
 ## Daily price refresh

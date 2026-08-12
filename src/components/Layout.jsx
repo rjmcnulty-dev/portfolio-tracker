@@ -9,7 +9,7 @@ function linkClass({ isActive }) {
 }
 
 export default function Layout() {
-  const { accounts, addAccount, deleteAccount, error: accountsError } = useAccounts()
+  const { accounts, addAccount, deleteAccount, moveAccount, error: accountsError } = useAccounts()
   const [showManageAccounts, setShowManageAccounts] = useState(false)
 
   return (
@@ -67,6 +67,7 @@ export default function Layout() {
           onClose={() => setShowManageAccounts(false)}
           onAdd={addAccount}
           onDelete={deleteAccount}
+          onMove={moveAccount}
         />
       )}
     </div>
