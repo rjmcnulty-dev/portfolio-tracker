@@ -198,7 +198,7 @@ export default function TickerPrices() {
                         {autoUpdatingTicker === ticker ? 'Updating…' : 'Auto Update'}
                       </button>
                       <button className="btn-link" onClick={() => startEdit(ticker)}>
-                        Update Price
+                        Manual Update
                       </button>
                     </>
                   )}
