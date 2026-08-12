@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import { useAccounts } from '../hooks/useAccounts'
+import { useCompanyNames } from '../hooks/useCompanyNames'
 import { isBuyTrade } from '../lib/tradeTypes'
 import './TickerPrices.css'
 
@@ -38,6 +39,7 @@ export default function TickerPrices() {
     () => [...new Set(trades.map((t) => t.ticker).filter(Boolean))].sort(),
     [trades],
   )
+  const companyNames = useCompanyNames(tickers)
 
   // Which accounts currently hold each ticker — same convention as holdings
   // elsewhere in the app: an open position is a BUY row, no lot-matching
@@ -151,7 +153,9 @@ export default function TickerPrices() {
             const isEditing = editingTicker === ticker
             return (
               <tr key={ticker}>
-                <td className="ticker-prices__ticker">{ticker}</td>
+                <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
+                  {ticker}
+                </td>
                 {accounts.map((account) => {
                   const isHeld = heldByTickerAccount.get(ticker)?.has(account.name)
                   return (

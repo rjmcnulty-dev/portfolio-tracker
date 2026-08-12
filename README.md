@@ -805,6 +805,25 @@ Get a free Finnhub key at [finnhub.io/register](https://finnhub.io/register). Li
 `TWELVE_DATA_API_KEY`, never prefix it `VITE_` — it must stay a Supabase secret, not reach
 the browser.
 
+## Ticker hover names
+
+Hovering a ticker in the Prices page (`/prices`) table shows the full company name as a
+native tooltip, via `supabase/functions/company-names` — a small Finnhub-only Edge
+Function (`stock/profile2`, the same lookup `watchlist-quote` uses for Stock Watch cards).
+It's batched: `useCompanyNames` sends every currently-displayed ticker in one request when
+the page loads, and caches results for the component's lifetime so switching account
+filters doesn't refetch names already resolved. No Twelve Data credits are spent — Finnhub's
+free tier (60 calls/minute) is generous enough to fetch a whole ticker list at once, unlike
+the 8-credit/minute budget the price-refresh jobs have to carefully ration. If a name fails
+to resolve, the tooltip just falls back to showing the ticker itself.
+
+Deploy/redeploy the same way as the other functions (reuses the same `FINNHUB_API_KEY`
+secret as `watchlist-quote` — no separate key needed):
+
+```bash
+npx supabase functions deploy company-names
+```
+
 ## Accounts
 
 Accounts (Robinhood, Traditional IRA, Roth IRA, and anything you add) live in the
