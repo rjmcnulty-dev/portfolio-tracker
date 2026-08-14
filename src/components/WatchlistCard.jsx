@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -15,8 +15,8 @@ import { computeSMA, findSupportResistance, mergeIndicators } from '../lib/techn
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
-const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y']
-const LEVEL_COUNTS = [1, 2, 3, 4]
+export const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y']
+export const LEVEL_COUNTS = [1, 2, 3, 4]
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -185,7 +185,7 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
   )
 }
 
-export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
+export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings }) {
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
@@ -193,6 +193,24 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes }) {
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(2)
   const [expanded, setExpanded] = useState(false)
+
+  // Cards otherwise manage these settings independently (so you can e.g.
+  // view one ticker on 1Y and another on 1M at the same time) — the Sync
+  // modal's "Apply to All" is a one-time broadcast, not a permanent link,
+  // so this only overwrites local state when syncSettings.version changes,
+  // never on every render.
+  useEffect(() => {
+    if (!syncSettings) return
+    // null range means "leave this card's own range alone" — only the
+    // indicator settings below are guaranteed free of any Twelve Data call.
+    if (syncSettings.range != null) setRange(syncSettings.range)
+    setShowSMA20(syncSettings.showSMA20)
+    setShowSMA50(syncSettings.showSMA50)
+    setShowSMA200(syncSettings.showSMA200)
+    setShowLevels(syncSettings.showLevels)
+    setLevelCount(syncSettings.levelCount)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncSettings?.version])
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
   const [notesDirty, setNotesDirty] = useState(false)

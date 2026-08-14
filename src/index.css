@@ -226,6 +226,39 @@ h3 {
   margin: 0;
 }
 
+.page__sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid #d3d9e0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy-mid);
+  margin: -8px 0 12px;
+}
+
+.page__sync-status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: page-sync-pulse 1s ease-in-out infinite;
+}
+
+@keyframes page-sync-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 /* KPI cards */
 
 .kpi-row {

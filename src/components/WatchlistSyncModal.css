@@ -1,0 +1,33 @@
+.watchlist-sync-modal {
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.watchlist-sync-modal__hint {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.watchlist-sync-modal__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.watchlist-sync-modal__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.watchlist-sync-modal__warning {
+  margin: 2px 0 0;
+  color: var(--gold);
+  font-size: 12px;
+}
