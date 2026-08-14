@@ -44,7 +44,7 @@ export default function Layout() {
             Trade Log
           </NavLink>
           <NavLink to="/prices" className={linkClass}>
-            Prices
+            Holdings - Prices
           </NavLink>
           <NavLink to="/deposits" className={linkClass}>
             Deposits
