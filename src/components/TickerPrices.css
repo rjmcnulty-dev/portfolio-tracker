@@ -79,6 +79,14 @@
   white-space: nowrap;
 }
 
+.ticker-prices__target-cell {
+  white-space: nowrap;
+}
+
+.ticker-prices__target-cell .btn-link {
+  margin-left: 6px;
+}
+
 .ticker-prices input[type='number'] {
   width: 110px;
   text-align: right;

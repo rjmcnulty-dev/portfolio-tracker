@@ -1,0 +1,120 @@
+.performance-evaluator {
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.performance-evaluator__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.performance-evaluator__header .modal__title {
+  margin-bottom: 0;
+}
+
+.performance-evaluator__disclaimer {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.performance-evaluator__intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.performance-evaluator__loading,
+.performance-evaluator__empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.performance-evaluator__table-wrap {
+  overflow-x: auto;
+}
+
+.performance-evaluator__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.performance-evaluator__table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--navy-dark);
+  color: var(--text-on-dark);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.performance-evaluator__table th.is-numeric {
+  text-align: right;
+}
+
+.performance-evaluator__table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf0f3;
+  color: var(--text-primary);
+}
+
+.performance-evaluator__table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-evaluator__table td.is-positive {
+  color: var(--green);
+}
+
+.performance-evaluator__table td.is-negative {
+  color: var(--red);
+}
+
+.performance-evaluator__ticker {
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.performance-evaluator__badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: default;
+}
+
+.performance-evaluator__badge--buy {
+  background: rgba(34, 158, 94, 0.14);
+  color: var(--green);
+}
+
+.performance-evaluator__badge--hold {
+  background: rgba(107, 114, 128, 0.14);
+  color: var(--text-muted);
+}
+
+.performance-evaluator__badge--sell {
+  background: rgba(214, 66, 64, 0.14);
+  color: var(--red);
+}
+
+.performance-evaluator__actions {
+  display: flex;
+  justify-content: flex-end;
+}

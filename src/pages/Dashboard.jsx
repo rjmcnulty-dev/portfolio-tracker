@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { usePortfolio } from '../hooks/usePortfolio'
 import KPIRow from '../components/KPIRow'
 import PortfolioValueChart from '../components/PortfolioValueChart'
@@ -5,16 +6,23 @@ import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
+import PerformanceEvaluator from '../components/PerformanceEvaluator'
 
 export default function Dashboard() {
   const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio('All')
+  const [showEvaluator, setShowEvaluator] = useState(false)
 
   return (
     <div className="page">
-      <header className="page__header">
-        <h1>All Accounts</h1>
-        <p className="page__subtitle">Consolidated view across Robinhood, Traditional IRA, and Roth IRA.</p>
+      <header className="page__header page__header--row">
+        <div>
+          <h1>All Accounts</h1>
+          <p className="page__subtitle">Consolidated view across Robinhood, Traditional IRA, and Roth IRA.</p>
+        </div>
+        <button className="btn btn--primary" onClick={() => setShowEvaluator(true)}>
+          Run Performance Evaluator
+        </button>
       </header>
 
       {error && <p className="page__error">Error: {error}</p>}
@@ -37,6 +45,10 @@ export default function Dashboard() {
             <HoldingsTable trades={trades} onDelete={deleteTrade} />
           </section>
         </>
+      )}
+
+      {showEvaluator && (
+        <PerformanceEvaluator holdings={holdings} title="All Accounts" onClose={() => setShowEvaluator(false)} />
       )}
     </div>
   )

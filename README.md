@@ -65,10 +65,10 @@ tickers you don't hold — price chart (1D through 1Y), next earnings date, and 
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the twelve tables the app reads
+Run the following in the Supabase SQL editor. It creates the thirteen tables the app reads
 and writes: `accounts`, `trades`, `trade_lot_allocations`, `tax_settings`, `roth_conversions`,
-`ticker_prices`, `portfolio_value_history`, `account_value_history`, `deposit_schedules`,
-`deposits`, `trade_schedules`, and `watchlist`.
+`ticker_prices`, `price_targets`, `portfolio_value_history`, `account_value_history`,
+`deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -178,6 +178,19 @@ create table if not exists ticker_prices (
   ticker text primary key,
   price numeric not null,
   as_of date,
+  updated_at timestamptz not null default now()
+);
+
+-- ─────────────────────────────────────────────
+-- price_targets: your own manually-set price
+-- target per ticker (analyst consensus targets
+-- aren't available on the free-tier APIs this app
+-- uses — see "Performance Evaluator" below). Set
+-- from the Prices page; read by the evaluator.
+-- ─────────────────────────────────────────────
+create table if not exists price_targets (
+  ticker text primary key,
+  target_price numeric not null,
   updated_at timestamptz not null default now()
 );
 
@@ -327,6 +340,7 @@ alter table trade_lot_allocations enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
+alter table price_targets enable row level security;
 alter table portfolio_value_history enable row level security;
 alter table account_value_history enable row level security;
 alter table deposit_schedules enable row level security;
@@ -340,6 +354,7 @@ create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for 
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
+create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
 create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
 create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
 create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
@@ -501,6 +516,20 @@ alter table accounts alter column sort_order set not null;
 alter table accounts alter column sort_order set default 0;
 ```
 
+**If you already have a database from before the Performance Evaluator**, run this
+migration to add `price_targets`:
+
+```sql
+create table if not exists price_targets (
+  ticker text primary key,
+  target_price numeric not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table price_targets enable row level security;
+create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
+```
+
 ## Daily price refresh
 
 `scripts/fetch-prices.mjs` is a small Node script that:
@@ -583,6 +612,50 @@ It's rate-limited the same way as the price-refresh scripts (8 Twelve Data credi
 so it can take a few minutes with more than a handful of tickers. A day where an open
 position's ticker has no price data yet (e.g. a brand-new listing) is skipped rather than
 written as a misleading $0 — the chart will just have a gap there.
+
+## Performance Evaluator
+
+**Run Performance Evaluator**, on the Dashboard and each account page, opens a modal that
+evaluates every open position in that scope (all accounts, or just that one) and suggests
+Buy/Hold/Sell for each — a rule of thumb, not investment advice.
+
+Two inputs feed the suggestion:
+
+- **Trend** — SMA20/50/200 position and support/resistance levels, the same technical
+  indicators Stock Watch charts already use, computed server-side by
+  `supabase/functions/evaluate-performance` from 1 year of daily closes per ticker (Twelve
+  Data `time_series`).
+- **Price target** — a number **you** set yourself, per ticker, on the Prices page
+  (`price_targets` table). Analyst consensus price targets aren't available on the
+  free-tier APIs this app uses: Finnhub's `/stock/price-target` 403s on the free tier, and
+  Twelve Data's `/price_target` is gated to ultra/enterprise plans (it "works" for the
+  symbol `AAPL` specifically — Twelve Data special-cases that one ticker as an always-free
+  demo regardless of plan, which is easy to mistake for the endpoint actually being open;
+  it isn't, for any other symbol).
+
+`src/lib/performanceEvaluator.js` is the pure function that turns (current price, your
+target, SMA20/50/200, support/resistance) into a suggestion — it's intentionally isolated
+from the Edge Function (which only fetches/computes raw inputs) so the rule can be read,
+audited, or tuned without touching the data-fetching code:
+
+- No target set → **Hold**, trend-only (there's nothing to judge value against yet).
+- ≥10% upside to target **and** price above at least 2 of the 3 SMAs → **Buy**.
+- Price already ≥5% past target → **Sell**.
+- Downtrend (above 0-1 SMAs) and price sitting within 3% of a resistance level → **Sell**.
+- Everything else → **Hold**.
+
+Also returns 1/3/6/12-month trailing returns per ticker (shown in the modal alongside the
+suggestion) — informational, not an input to the suggestion itself.
+
+Costs 1 Twelve Data credit per held ticker (same 8-credit/minute budget as everywhere
+else) — the modal warns and paces itself automatically for portfolios with more than 8
+positions, the same rate-limit chunking pattern as the price-refresh jobs.
+
+Deploy/redeploy the same way as the other functions:
+
+```bash
+npx supabase functions deploy evaluate-performance
+```
 
 ## On-demand price refresh (Edge Function)
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { useTickerPrices } from '../hooks/useTickerPrices'
+import { usePriceTargets } from '../hooks/usePriceTargets'
 import { useAccounts } from '../hooks/useAccounts'
 import { useCompanyNames } from '../hooks/useCompanyNames'
 import { isBuyTrade } from '../lib/tradeTypes'
@@ -23,6 +24,7 @@ function formatTimestamp(iso) {
 export default function TickerPrices() {
   const { trades, loading: tradesLoading } = useTrades('All')
   const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
+  const { targets, updateTarget } = usePriceTargets()
   const { accounts } = useAccounts()
 
   const [editingTicker, setEditingTicker] = useState(null)
@@ -34,6 +36,11 @@ export default function TickerPrices() {
   const [refreshMessage, setRefreshMessage] = useState(null)
   const [autoUpdatingTicker, setAutoUpdatingTicker] = useState(null)
   const [autoUpdateError, setAutoUpdateError] = useState(null)
+
+  const [editingTargetTicker, setEditingTargetTicker] = useState(null)
+  const [draftTarget, setDraftTarget] = useState('')
+  const [savingTarget, setSavingTarget] = useState(false)
+  const [saveTargetError, setSaveTargetError] = useState(null)
 
   const tickers = useMemo(
     () => [...new Set(trades.map((t) => t.ticker).filter(Boolean))].sort(),
@@ -119,6 +126,37 @@ export default function TickerPrices() {
     }
   }
 
+  function startEditTarget(ticker) {
+    setEditingTargetTicker(ticker)
+    setDraftTarget(targets[ticker]?.target_price ?? '')
+    setSaveTargetError(null)
+  }
+
+  function cancelEditTarget() {
+    setEditingTargetTicker(null)
+    setDraftTarget('')
+    setSaveTargetError(null)
+  }
+
+  async function handleSaveTarget(ticker) {
+    if (draftTarget === '' || Number.isNaN(Number(draftTarget))) {
+      setSaveTargetError('Enter a valid price target.')
+      return
+    }
+
+    setSavingTarget(true)
+    setSaveTargetError(null)
+    try {
+      await updateTarget(ticker, draftTarget)
+      setEditingTargetTicker(null)
+      setDraftTarget('')
+    } catch (err) {
+      setSaveTargetError(err.message)
+    } finally {
+      setSavingTarget(false)
+    }
+  }
+
   if (tradesLoading || pricesLoading) return <div className="ticker-prices__empty">Loading prices…</div>
   if (error) return <div className="ticker-prices__empty">Error: {error}</div>
   if (!tickers.length) return <div className="ticker-prices__empty">No tickers yet — add a trade first.</div>
@@ -144,6 +182,7 @@ export default function TickerPrices() {
             ))}
             <th className="is-numeric">Current Price</th>
             <th>As Of</th>
+            <th className="is-numeric">Price Target</th>
             <th></th>
           </tr>
         </thead>
@@ -151,6 +190,8 @@ export default function TickerPrices() {
           {tickers.map((ticker) => {
             const row = prices[ticker]
             const isEditing = editingTicker === ticker
+            const targetRow = targets[ticker]
+            const isEditingTarget = editingTargetTicker === ticker
             return (
               <tr key={ticker}>
                 <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
@@ -178,6 +219,32 @@ export default function TickerPrices() {
                   )}
                 </td>
                 <td>{row?.as_of ?? '—'}</td>
+                <td className="is-numeric ticker-prices__target-cell">
+                  {isEditingTarget ? (
+                    <>
+                      <input
+                        type="number"
+                        step="any"
+                        autoFocus
+                        value={draftTarget}
+                        onChange={(e) => setDraftTarget(e.target.value)}
+                      />
+                      <button className="btn-link" disabled={savingTarget} onClick={() => handleSaveTarget(ticker)}>
+                        {savingTarget ? 'Saving…' : 'Save'}
+                      </button>
+                      <button className="btn-link" disabled={savingTarget} onClick={cancelEditTarget}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {formatCurrency(targetRow?.target_price)}
+                      <button className="btn-link" onClick={() => startEditTarget(ticker)}>
+                        {targetRow ? 'Edit' : 'Set'}
+                      </button>
+                    </>
+                  )}
+                </td>
                 <td className="ticker-prices__actions">
                   {isEditing ? (
                     <>
@@ -210,6 +277,7 @@ export default function TickerPrices() {
       </table>
       {saveError && <p className="ticker-prices__error">{saveError}</p>}
       {autoUpdateError && <p className="ticker-prices__error">{autoUpdateError}</p>}
+      {saveTargetError && <p className="ticker-prices__error">{saveTargetError}</p>}
     </div>
   )
 }

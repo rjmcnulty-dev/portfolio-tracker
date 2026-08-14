@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useAccounts } from '../hooks/useAccounts'
@@ -8,6 +9,7 @@ import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
+import PerformanceEvaluator from '../components/PerformanceEvaluator'
 
 // Every account page matches the same route (/account/:accountSlug), so
 // React Router reuses one AccountPage instance across tabs instead of
@@ -46,12 +48,18 @@ export default function AccountPage() {
 function AccountPageContent({ accountLabel }) {
   const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio(accountLabel)
+  const [showEvaluator, setShowEvaluator] = useState(false)
 
   return (
     <div className="page">
-      <header className="page__header">
-        <h1>{accountLabel}</h1>
-        <p className="page__subtitle">Positions and performance for this account only.</p>
+      <header className="page__header page__header--row">
+        <div>
+          <h1>{accountLabel}</h1>
+          <p className="page__subtitle">Positions and performance for this account only.</p>
+        </div>
+        <button className="btn btn--primary" onClick={() => setShowEvaluator(true)}>
+          Run Performance Evaluator
+        </button>
       </header>
 
       {error && <p className="page__error">Error: {error}</p>}
@@ -74,6 +82,10 @@ function AccountPageContent({ accountLabel }) {
             <HoldingsTable trades={trades} onDelete={deleteTrade} />
           </section>
         </>
+      )}
+
+      {showEvaluator && (
+        <PerformanceEvaluator holdings={holdings} title={accountLabel} onClose={() => setShowEvaluator(false)} />
       )}
     </div>
   )
