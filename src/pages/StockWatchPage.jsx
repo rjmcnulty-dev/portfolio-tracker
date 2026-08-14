@@ -1,24 +1,8 @@
 import { useState } from 'react'
 import { useWatchlist } from '../hooks/useWatchlist'
+import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
-
-// Matches every other Twelve Data-backed job in this app (fetch-prices.mjs,
-// the backfill script, evaluate-performance): free tier caps at 8 credits
-// per rolling minute.
-const MAX_TICKERS_PER_MINUTE = 8
-const RATE_LIMIT_WINDOW_SECONDS = 61
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function countdown(totalSeconds, onTick) {
-  for (let remaining = totalSeconds; remaining > 0; remaining--) {
-    onTick(remaining)
-    await wait(1000)
-  }
-}
 
 export default function StockWatchPage() {
   const { watchlist, loading, error, addTicker, updateNotes, removeTicker } = useWatchlist()
@@ -26,13 +10,23 @@ export default function StockWatchPage() {
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
   const [showSyncModal, setShowSyncModal] = useState(false)
-  // Per-ticker instead of one shared object, so a metered range sync can
-  // reveal itself to only the current batch of cards while the rest keep
-  // their prior settings until their own turn comes up.
+  // Per-ticker rather than one shared object, purely so each card's own
+  // useEffect only re-applies when ITS entry's version changes.
   const [syncMap, setSyncMap] = useState(new Map())
-  const [syncStatus, setSyncStatus] = useState(null) // { batch, totalBatches, secondsUntilNext } | null
 
-  function broadcast(tickers, settings) {
+  // Every fetch — initial mount, a manual range click, the per-card Refresh
+  // button, or this page's Sync modal — now goes through the same shared
+  // rate-limit queue (src/lib/twelveDataQueue.js), so applying a sync to
+  // every card at once is safe: whichever fetches it triggers get paced to
+  // Twelve Data's 8-credits/minute cap automatically, same as everything
+  // else on this page.
+  const queueStatus = useTwelveDataQueueStatus()
+  const secondsUntilNextWindow = queueStatus.windowEndsAt
+    ? Math.max(0, Math.ceil((queueStatus.windowEndsAt - Date.now()) / 1000))
+    : 0
+
+  function handleApplySync(settings) {
+    const tickers = watchlist.map((item) => item.ticker)
     setSyncMap((prev) => {
       const next = new Map(prev)
       for (const ticker of tickers) {
@@ -41,33 +35,6 @@ export default function StockWatchPage() {
       }
       return next
     })
-  }
-
-  async function handleApplySync(settings) {
-    const tickers = watchlist.map((item) => item.ticker)
-
-    // No range change is always instant/free (indicator toggles are pure
-    // client-side rendering) — apply to every card at once, no metering.
-    if (settings.range === null) {
-      broadcast(tickers, settings)
-      return
-    }
-
-    const batches = []
-    for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_MINUTE) {
-      batches.push(tickers.slice(i, i + MAX_TICKERS_PER_MINUTE))
-    }
-
-    for (let i = 0; i < batches.length; i++) {
-      broadcast(batches[i], settings)
-      const isLastBatch = i === batches.length - 1
-      if (!isLastBatch) {
-        await countdown(RATE_LIMIT_WINDOW_SECONDS, (secondsUntilNext) => {
-          setSyncStatus({ batch: i + 2, totalBatches: batches.length, secondsUntilNext })
-        })
-      }
-    }
-    setSyncStatus(null)
   }
 
   async function handleAdd(event) {
@@ -96,16 +63,16 @@ export default function StockWatchPage() {
           </p>
         </div>
         {watchlist.length > 0 && (
-          <button className="btn btn--ghost" disabled={Boolean(syncStatus)} onClick={() => setShowSyncModal(true)}>
+          <button className="btn btn--ghost" onClick={() => setShowSyncModal(true)}>
             Sync All Charts
           </button>
         )}
       </header>
 
-      {syncStatus && (
+      {queueStatus.queued > 0 && (
         <p className="page__sync-status">
-          Refreshing Data… batch {syncStatus.batch - 1} of {syncStatus.totalBatches} done, next batch in{' '}
-          {syncStatus.secondsUntilNext}s
+          Refreshing Data… {queueStatus.queued} chart{queueStatus.queued === 1 ? '' : 's'} waiting, next available in{' '}
+          {secondsUntilNextWindow}s
         </p>
       )}
 
