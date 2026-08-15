@@ -1080,6 +1080,38 @@ Only **adding** accounts is supported for now — no rename or delete UI yet (de
 with existing trades/deposits attached needs a real decision about what happens to that
 data, so it's deferred rather than half-built).
 
+## Admin / Auth
+
+`/admin` is a login-gated section for app configuration (business settings now, encrypted
+API-key management to follow) — the one part of this app that requires signing in. Every
+other route and table is unaffected: this app otherwise has **no authentication anywhere**,
+by design (see the "single-user setup" note in the SQL schema section above) — every table's
+RLS policy is `using (true)` for the anon role, and the sidebar/every other page works with
+no session at all. `/admin` is a deliberate, narrow exception to that.
+
+**One-time setup** — create the single admin user via the Supabase Dashboard (there is no
+in-app sign-up flow, intentionally, since this is a single-user app):
+
+1. Supabase Dashboard → **Authentication → Users → Add user**.
+2. Enter an email and password, and check **Auto Confirm User** (skips email verification —
+   there's no SMTP configured for this project, so a verification email would otherwise never
+   arrive).
+3. Sign in at `/#/login` with that email/password.
+
+**How the gate works**: `src/hooks/useAuth.js` mirrors `supabase.auth`'s session state (which
+`@supabase/supabase-js` already persists to `localStorage` and auto-refreshes by default —
+nothing extra configured for that). `src/components/RequireAuth.jsx` is a route-wrapper that
+redirects to `/login` when signed out, remembering the page you were headed to so sign-in
+returns you there. `src/pages/LoginPage.jsx` is a standalone page (no sidebar) that calls
+`supabase.auth.signInWithPassword`. `/admin` itself (`src/pages/AdminPage.jsx`) stays nested
+under the normal `Layout` so it keeps the sidebar like every other page.
+
+This protects **who can reach `/admin`'s controls** — it does not change what the anon key
+can already do to the database directly (every other table is still `using (true)`, unchanged
+by this feature). A later addition to this section (an `app_config` table for business
+settings, editable from `/admin`) will tighten writes on that one new table to
+`auth.role() = 'authenticated'`; no other table's policy changes.
+
 ## App structure
 
 ```
@@ -1097,7 +1129,9 @@ src/
     useWatchlist.js         # CRUD for watchlist (ticker + notes)
     useStockQuote.js        # Live chart series + next earnings date for one ticker/range, via watchlist-quote
     usePortfolio.js       # KPIs, allocation %, P&L-by-ticker, holdings, and cash position; overlays live prices onto open lots
+    useAuth.js               # Mirrors supabase.auth session state — see "Admin / Auth"
   components/
+    RequireAuth.jsx        # Route wrapper: redirects to /login when signed out — see "Admin / Auth"
     Layout.jsx            # Sidebar nav (incl. Add Account) + main content outlet
     AddAccountForm.jsx     # Add-account modal, opened from the sidebar's "+"
     KPIRow.jsx             # 6 stat cards (cash position, invested, mkt value, unrealized, realized, total P&L)
@@ -1124,6 +1158,8 @@ src/
     PricesPage.jsx          # Manual price overrides (/prices)
     DepositsPage.jsx        # Deposit/withdrawal ledger + recurring schedules (/deposits)
     StockWatchPage.jsx      # Watchlist: add ticker, view chart/earnings/notes (/watch)
+    LoginPage.jsx            # Standalone (no sidebar) sign-in form — see "Admin / Auth"
+    AdminPage.jsx            # Login-gated app config (/admin) — see "Admin / Auth"
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")

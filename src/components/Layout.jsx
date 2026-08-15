@@ -55,6 +55,9 @@ export default function Layout() {
           <NavLink to="/tax" className={linkClass}>
             Tax &amp; Roth
           </NavLink>
+          <NavLink to="/admin" className={linkClass}>
+            Admin
+          </NavLink>
         </nav>
       </aside>
       <main className="app-main">
