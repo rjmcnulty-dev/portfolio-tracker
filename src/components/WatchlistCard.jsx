@@ -11,13 +11,14 @@ import {
   YAxis,
 } from 'recharts'
 import { useStockQuote } from '../hooks/useStockQuote'
-import { computeSMA, findSupportResistance, mergeIndicators } from '../lib/technicalIndicators'
+import { computeSMA, computeStochastic, findSupportResistance, mergeIndicators } from '../lib/technicalIndicators'
 import { useConfigValue } from '../hooks/useAppConfig'
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
 const DEFAULT_MA_PERIODS = [20, 50, 200]
 const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
+const DEFAULT_STOCHASTIC_TUNING = { kPeriod: 14, kSmoothing: 3, dPeriod: 3, overbought: 80, oversold: 20 }
 
 // 20D/50D/200D fetch enough history (2x the period — see watchlist-quote's
 // RANGE_PARAMS) that the matching moving average (MA20/50/200) renders as a
@@ -48,6 +49,14 @@ function formatEarningsDate(dateStr) {
     year: 'numeric',
     timeZone: 'UTC',
   })
+}
+
+// dates is already most-recent-first (see watchlist-quote's
+// recentEarningsDates) — independent of the selected chart range, unlike
+// the on-chart markers, which only cover whatever's currently plotted.
+function formatEarningsList(dates) {
+  if (!dates.length) return 'None in the past year'
+  return dates.map(formatEarningsDate).join('  ·  ')
 }
 
 // Finnhub reports floatShares/sharesOutstanding in millions (e.g. 1126.1 ==
@@ -116,12 +125,15 @@ function ChartControls({ range, setRange, indicators, levelCount, setLevelCount,
   )
 }
 
-// Support/resistance render as ReferenceLines, which Recharts' default
-// Tooltip payload doesn't include (it only reflects Line/Area/Bar series at
-// the hovered x). A custom content renderer lets the callout append them
-// as a fixed supplementary block alongside whatever's under the cursor.
-function ChartTooltip({ active, payload, label, support, resistance, showLevels }) {
+// Support/resistance and earnings dates render as ReferenceLines, which
+// Recharts' default Tooltip payload doesn't include (it only reflects
+// Line/Area/Bar series at the hovered x). A custom content renderer lets the
+// callout append them as a fixed supplementary block alongside whatever's
+// under the cursor.
+function ChartTooltip({ active, payload, label, support, resistance, showLevels, showEarnings, earningsDates }) {
   if (!active || !payload?.length) return null
+
+  const isEarningsDate = showEarnings && earningsDates.includes(label)
 
   return (
     <div className="watchlist-card__tooltip">
@@ -131,6 +143,11 @@ function ChartTooltip({ active, payload, label, support, resistance, showLevels 
           {entry.name}: {formatCurrency(entry.value)}
         </p>
       ))}
+      {isEarningsDate && (
+        <p className="watchlist-card__tooltip-row" style={{ color: 'var(--gold)' }}>
+          Earnings report
+        </p>
+      )}
       {showLevels && (resistance.length > 0 || support.length > 0) && (
         <div className="watchlist-card__tooltip-levels">
           {resistance.map((level) => (
@@ -149,7 +166,20 @@ function ChartTooltip({ active, payload, label, support, resistance, showLevels 
   )
 }
 
-function PriceChart({ chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, maPeriods, height }) {
+function PriceChart({
+  chartData,
+  range,
+  showLevels,
+  support,
+  resistance,
+  showSMA20,
+  showSMA50,
+  showSMA200,
+  maPeriods,
+  showEarnings,
+  earningsDates,
+  height,
+}) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
@@ -162,8 +192,28 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
           minTickGap={30}
         />
         <YAxis domain={['auto', 'auto']} tickFormatter={formatCurrency} stroke="var(--text-muted)" fontSize={11} width={70} />
-        <Tooltip content={<ChartTooltip support={support} resistance={resistance} showLevels={showLevels} />} />
+        <Tooltip
+          content={
+            <ChartTooltip
+              support={support}
+              resistance={resistance}
+              showLevels={showLevels}
+              showEarnings={showEarnings}
+              earningsDates={earningsDates}
+            />
+          }
+        />
         <Legend wrapperStyle={{ fontSize: 12 }} />
+        {showEarnings &&
+          earningsDates.map((date) => (
+            <ReferenceLine
+              key={`earn-${date}`}
+              x={date}
+              stroke="var(--gold)"
+              strokeDasharray="3 3"
+              label={{ value: 'E', position: 'top', fill: 'var(--gold)', fontSize: 10 }}
+            />
+          ))}
         {showLevels &&
           resistance.map((level) => (
             <ReferenceLine
@@ -215,15 +265,70 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
   )
 }
 
+function StochasticTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="watchlist-card__tooltip">
+      <p className="watchlist-card__tooltip-label">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey} className="watchlist-card__tooltip-row" style={{ color: entry.color }}>
+          {entry.name}: {entry.value == null ? '—' : entry.value.toFixed(1)}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// Separate panel, not an overlay on PriceChart — %K/%D oscillate 0-100,
+// incompatible with a dollar-price y-axis. Reads the same `chartData` array
+// (stochK/stochD were merged into it alongside sma20/50/200), it just plots
+// different fields on a different scale.
+function StochasticChart({ chartData, range, overbought, oversold, height }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e9ee" />
+        <XAxis
+          dataKey="date"
+          tickFormatter={(v) => formatXAxisTick(v, range)}
+          stroke="var(--text-muted)"
+          fontSize={11}
+          minTickGap={30}
+        />
+        <YAxis domain={[0, 100]} ticks={[0, oversold, 50, overbought, 100]} stroke="var(--text-muted)" fontSize={11} width={70} />
+        <Tooltip content={<StochasticTooltip />} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <ReferenceLine
+          y={overbought}
+          stroke="var(--text-muted)"
+          strokeDasharray="4 4"
+          label={{ value: 'Overbought', position: 'insideTopRight', fill: 'var(--text-muted)', fontSize: 10 }}
+        />
+        <ReferenceLine
+          y={oversold}
+          stroke="var(--text-muted)"
+          strokeDasharray="4 4"
+          label={{ value: 'Oversold', position: 'insideBottomRight', fill: 'var(--text-muted)', fontSize: 10 }}
+        />
+        <Line type="monotone" dataKey="stochK" name="%K" stroke="var(--blue)" dot={false} strokeWidth={1.5} connectNulls={false} />
+        <Line type="monotone" dataKey="stochD" name="%D" stroke="var(--gold)" dot={false} strokeWidth={1.5} connectNulls={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings }) {
   const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
+  const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
   const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(srTuning.maxLevelsDefault)
+  const [showEarnings, setShowEarnings] = useState(true)
+  const [showStochastic, setShowStochastic] = useState(true)
   const [expanded, setExpanded] = useState(false)
   // config loads asynchronously, so `srTuning.maxLevelsDefault` is still the
   // hardcoded fallback at the moment the useState above reads it — this
@@ -251,6 +356,8 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     setShowLevels(syncSettings.showLevels)
     levelCountTouched.current = true
     setLevelCount(syncSettings.levelCount)
+    setShowEarnings(syncSettings.showEarnings)
+    setShowStochastic(syncSettings.showStochastic)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncSettings?.version])
   const [confirmingRemove, setConfirmingRemove] = useState(false)
@@ -259,8 +366,18 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesError, setNotesError] = useState(null)
 
-  const { series, nextEarningsDate, companyName, floatShares, sharesOutstanding, loading, error, refresh } =
-    useStockQuote(item.ticker, range)
+  const {
+    series,
+    nextEarningsDate,
+    earningsDates,
+    recentEarningsDates,
+    companyName,
+    floatShares,
+    sharesOutstanding,
+    loading,
+    error,
+    refresh,
+  } = useStockQuote(item.ticker, range)
 
   const latestPrice = series.length ? series[series.length - 1].close : null
   const firstPrice = series.length ? series[0].close : null
@@ -274,6 +391,10 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     () => findSupportResistance(series, levelCount, srTuning.tolerancePct, srTuning.swingWindowPct),
     [series, levelCount, srTuning],
   )
+  const stochastic = useMemo(
+    () => computeStochastic(series, stochasticTuning.kPeriod, stochasticTuning.kSmoothing, stochasticTuning.dPeriod),
+    [series, stochasticTuning],
+  )
 
   const chartData = useMemo(
     () =>
@@ -281,8 +402,10 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
         { key: 'sma20', points: sma20 },
         { key: 'sma50', points: sma50 },
         { key: 'sma200', points: sma200 },
+        { key: 'stochK', points: stochastic.k },
+        { key: 'stochD', points: stochastic.d },
       ]),
-    [series, sma20, sma50, sma200],
+    [series, sma20, sma50, sma200, stochastic],
   )
 
   function handleLevelCountChange(n) {
@@ -301,6 +424,20 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
       setShow: setShowLevels,
       disabled: !support.length && !resistance.length,
     },
+    {
+      key: 'earnings',
+      label: 'Earnings',
+      show: showEarnings,
+      setShow: setShowEarnings,
+      disabled: !earningsDates.length,
+    },
+    {
+      key: 'stochastic',
+      label: 'Stochastic',
+      show: showStochastic,
+      setShow: setShowStochastic,
+      disabled: !stochastic.k.length,
+    },
   ]
 
   async function handleSaveNotes() {
@@ -316,7 +453,19 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     }
   }
 
-  const chartProps = { chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, maPeriods }
+  const chartProps = {
+    chartData,
+    range,
+    showLevels,
+    support,
+    resistance,
+    showSMA20,
+    showSMA50,
+    showSMA200,
+    maPeriods,
+    showEarnings,
+    earningsDates,
+  }
 
   return (
     <div className="watchlist-card">
@@ -362,11 +511,36 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
       />
 
       {error && <p className="watchlist-card__error">{error}</p>}
-      {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={240} />}
+      {loading ? (
+        <p className="watchlist-card__loading">Loading chart…</p>
+      ) : (
+        <>
+          <PriceChart {...chartProps} height={240} />
+          {showStochastic && stochastic.k.length > 0 && (
+            <>
+              <span className="watchlist-card__stochastic-label">
+                Stochastic ({stochasticTuning.kPeriod}, {stochasticTuning.kSmoothing}, {stochasticTuning.dPeriod})
+              </span>
+              <StochasticChart
+                chartData={chartData}
+                range={range}
+                overbought={stochasticTuning.overbought}
+                oversold={stochasticTuning.oversold}
+                height={100}
+              />
+            </>
+          )}
+        </>
+      )}
 
       <div className="watchlist-card__earnings">
         <span className="watchlist-card__earnings-label">Next Earnings</span>
         <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
+      </div>
+
+      <div className="watchlist-card__earnings">
+        <span className="watchlist-card__earnings-label">Recent Earnings</span>
+        <span className="watchlist-card__earnings-value watchlist-card__earnings-value--list">{formatEarningsList(recentEarningsDates)}</span>
       </div>
 
       <div className="watchlist-card__earnings">
@@ -419,11 +593,36 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
       />
 
             {error && <p className="watchlist-card__error">{error}</p>}
-            {loading ? <p className="watchlist-card__loading">Loading chart…</p> : <PriceChart {...chartProps} height={460} />}
+            {loading ? (
+              <p className="watchlist-card__loading">Loading chart…</p>
+            ) : (
+              <>
+                <PriceChart {...chartProps} height={460} />
+                {showStochastic && stochastic.k.length > 0 && (
+                  <>
+                    <span className="watchlist-card__stochastic-label">
+                      Stochastic ({stochasticTuning.kPeriod}, {stochasticTuning.kSmoothing}, {stochasticTuning.dPeriod})
+                    </span>
+                    <StochasticChart
+                      chartData={chartData}
+                      range={range}
+                      overbought={stochasticTuning.overbought}
+                      oversold={stochasticTuning.oversold}
+                      height={160}
+                    />
+                  </>
+                )}
+              </>
+            )}
 
             <div className="watchlist-card__earnings">
               <span className="watchlist-card__earnings-label">Next Earnings</span>
               <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
+            </div>
+
+            <div className="watchlist-card__earnings">
+              <span className="watchlist-card__earnings-label">Recent Earnings</span>
+              <span className="watchlist-card__earnings-value watchlist-card__earnings-value--list">{formatEarningsList(recentEarningsDates)}</span>
             </div>
 
             <div className="watchlist-card__earnings">

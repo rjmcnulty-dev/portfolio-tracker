@@ -9,7 +9,8 @@ trades (one-time or recurring, daily through monthly) are tracked per account, w
 recurring schedules auto-generating their ledger records on the same
 scheduled-job/on-demand pattern as prices. Each account's uninvested cash position is
 computed live from deposits and trade cash flow. A separate Stock Watch page tracks
-tickers you don't hold — price chart (1D through 1Y), next earnings date, and notes.
+tickers you don't hold — price chart (1D through 1Y) with earnings dates marked on it, next
+earnings date, and notes.
 
 ## Stack
 
@@ -998,14 +999,59 @@ That function combines two providers:
 
 - **Twelve Data** `time_series` for the chart. Range maps to interval/outputsize: `1D` →
   5min bars, `1W` → 30min bars, `1M`/`3M`/`6M`/`1Y` → daily bars over 30/90/180/365 days.
-- **Finnhub** `calendar/earnings` for the next earnings date — this needed a second
+- **Finnhub** `calendar/earnings` for earnings report dates — this needed a second
   provider because Twelve Data's forward-looking earnings calendar is a paid-plan feature;
   its free `/earnings` endpoint only returns *past* reports. Finnhub's free tier has a real,
   documented earnings-calendar endpoint, so that's used instead of scraping a finance
-  site's HTML (fragile, likely against its ToS) or estimating from historical cadence.
+  site's HTML (fragile, likely against its ToS) or estimating from historical cadence. One
+  call (`from` 2 years back, `to` 6 months out — wide enough to cover every range option's
+  history plus the forward lookahead) covers the "Next Earnings" text field, the "Recent
+  Earnings" list, and the in-chart markers below at no extra API cost: `nextEarningsDate` is
+  the soonest date on or after today, `earningsDates` is whichever of those dates actually
+  fall within the currently plotted range, and `recentEarningsDates` is every reported date
+  from the trailing 365 days — a fixed window independent of chart range, unlike
+  `earningsDates`.
 - **Finnhub** `stock/profile2` for company name and float (`floatingShare`, reported in
   millions of shares) — one call gets both, so float rides along for free on a request the
   card was already making.
+
+**Earnings report dates on the chart itself** — a gold dashed vertical line (labeled "E") at
+each earnings date within the visible range, toggleable via the "Earnings" chart control like
+the moving averages and support/resistance ("Sync All Charts" can broadcast it too). Hovering
+a marked date's point shows "Earnings report" in the tooltip alongside the price. Markers only
+appear on daily-bar ranges (`1M`/`3M`/`6M`/`1Y`/`20D`/`50D`/`200D`) — Recharts' `ReferenceLine`
+needs its `x` to exactly match one of the chart's own x-axis values, and `1D`/`1W`'s
+timestamped intraday points (`"2026-08-14 09:30:00"`) never match a plain earnings date
+(`"2026-08-14"`), so those ranges simply show no markers rather than a misplaced one — a
+reasonable gap since neither range is likely to span an earnings date's own trading day
+anyway.
+
+**Recent Earnings**, next to "Next Earnings" on the card, lists every reported earnings date
+from the past 365 days (most recent first, e.g. "Jul 24, 2026 · Apr 22, 2026 · ..."), or "None
+in the past year" if there aren't any. Unlike the in-chart markers, this doesn't depend on
+which range is currently selected — it's always the same trailing-year window.
+
+**Some tickers only ever show a next earnings date, never historical ones** (confirmed on
+MU and MAMA, both otherwise-working tickers) — not a bug in the fetch window or date
+filtering (verified by temporarily dumping the raw, unfiltered Finnhub response: MU/MAMA's
+`earningsCalendar` genuinely only contained future dates, while a control ticker like AAPL's
+included a past one). Finnhub's free-tier `calendar/earnings` backfill coverage varies by
+symbol and isn't guaranteed for every ticker regardless of company size — there's no request
+parameter that recovers data the endpoint doesn't have. "Next Earnings" still works for these
+because it only needs one upcoming date, which Finnhub does provide.
+
+**Stochastic Oscillator** is a separate sub-chart below the price chart (not an overlay —
+%K/%D oscillate 0-100, incompatible with a dollar price axis), toggleable via the "Stochastic"
+chart control like the other indicators ("Sync All Charts" can broadcast it too). %K is where
+the close sits within the high/low range of the trailing `kPeriod` bars (0 = at the period
+low, 100 = at the period high), smoothed over `kSmoothing` bars — the commonly-charted "slow"
+stochastic, less noisy than raw/"fast" %K. %D is a `dPeriod`-bar SMA of %K, a signal line.
+Dashed reference lines mark the overbought/oversold thresholds. Defaults (14, 3, 3, overbought
+80, oversold 20) are the standard textbook parameters, tunable from `/admin`'s App Settings
+like the other Stock Watch indicators (`stochastic_tuning`). Computed client-side in
+`computeStochastic` (`src/lib/technicalIndicators.js`) from the high/low/close each chart bar
+already has — Twelve Data's `time_series` returns full OHLC by default, `watchlist-quote` just
+wasn't reading `high`/`low` until this needed them, so there's no extra API cost.
 
 **Short interest was investigated and isn't available for free.** Neither Twelve Data
 (`/statistics`, where it'd live, is 403 on the free tier — pro/ultra/venture/enterprise
@@ -1144,6 +1190,8 @@ insert into app_config (key, value, category, label, description) values
     'SMA periods drawn on Stock Watch charts and used by the Performance Evaluator''s trend score.'),
   ('support_resistance_tuning', '{"tolerancePct":0.015,"swingWindowPct":0.03,"maxLevelsDefault":2,"proximityPct":0.03}', 'Stock Watch', 'Support/Resistance Tuning',
     'Clustering tolerance and swing-point window for the support/resistance levels drawn on charts, plus how close counts as "near" a level in the Performance Evaluator.'),
+  ('stochastic_tuning', '{"kPeriod":14,"kSmoothing":3,"dPeriod":3,"overbought":80,"oversold":20}', 'Stock Watch', 'Stochastic Oscillator Tuning',
+    '%K lookback, %K smoothing, and %D signal-line periods for the Stochastic sub-chart, plus the overbought/oversold reference levels drawn on it.'),
   ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1}', 'Performance Evaluator', 'Buy/Sell Thresholds',
     'Trigger points for the Buy/Sell suggestion: upside % to target and trend score cutoffs.'),
   ('daily_gains_defaults', '{"defaultDayCount":5,"weekSize":5}', 'Daily Gains', 'Daily Gains Defaults',

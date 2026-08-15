@@ -5,6 +5,8 @@ import { fetchWatchlistQuote, invalidateWatchlistQuote } from '../lib/twelveData
 export function useStockQuote(ticker, range) {
   const [series, setSeries] = useState([])
   const [nextEarningsDate, setNextEarningsDate] = useState(null)
+  const [earningsDates, setEarningsDates] = useState([])
+  const [recentEarningsDates, setRecentEarningsDates] = useState([])
   const [companyName, setCompanyName] = useState(null)
   const [floatShares, setFloatShares] = useState(null)
   const [sharesOutstanding, setSharesOutstanding] = useState(null)
@@ -37,6 +39,8 @@ export function useStockQuote(ticker, range) {
       if (requestId !== latestRequestId.current) return
       setSeries(data.series ?? [])
       setNextEarningsDate(data.nextEarningsDate ?? null)
+      setEarningsDates(data.earningsDates ?? [])
+      setRecentEarningsDates(data.recentEarningsDates ?? [])
       setCompanyName(data.companyName ?? null)
       setFloatShares(data.floatShares ?? null)
       setSharesOutstanding(data.sharesOutstanding ?? null)
@@ -62,5 +66,16 @@ export function useStockQuote(ticker, range) {
     load(ticker, range)
   }, [ticker, range, load])
 
-  return { series, nextEarningsDate, companyName, floatShares, sharesOutstanding, loading, error, refresh }
+  return {
+    series,
+    nextEarningsDate,
+    earningsDates,
+    recentEarningsDates,
+    companyName,
+    floatShares,
+    sharesOutstanding,
+    loading,
+    error,
+    refresh,
+  }
 }

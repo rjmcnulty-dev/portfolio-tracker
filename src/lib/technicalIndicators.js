@@ -16,6 +16,48 @@ export function computeSMA(series, period) {
   return points
 }
 
+// A `period`-bar simple moving average of a {date, value} point series —
+// same math as computeSMA above, but over already-computed indicator
+// points (e.g. raw %K) instead of raw price bars.
+function smoothPoints(points, period) {
+  if (period <= 1) return points
+  const result = []
+  let sum = 0
+  for (let i = 0; i < points.length; i++) {
+    sum += points[i].value
+    if (i >= period) sum -= points[i - period].value
+    if (i >= period - 1) {
+      result.push({ date: points[i].date, value: sum / period })
+    }
+  }
+  return result
+}
+
+// Stochastic Oscillator: %K measures where the close sits within the
+// high/low range of the trailing `kPeriod` bars (0 = at the period's low,
+// 100 = at its high); %D is a `dPeriod`-bar SMA of %K, a signal line. %K
+// itself is smoothed by `kSmoothing` bars first — this is the commonly
+// charted "slow" stochastic (kSmoothing=1 would give the noisier "fast"
+// variant). A flat high==low window (e.g. a halted or illiquid ticker) is
+// scored 50 (neither overbought nor oversold) rather than dividing by zero.
+export function computeStochastic(series, kPeriod = 14, kSmoothing = 3, dPeriod = 3) {
+  if (series.length < kPeriod) return { k: [], d: [] }
+
+  const rawK = []
+  for (let i = kPeriod - 1; i < series.length; i++) {
+    const window = series.slice(i - kPeriod + 1, i + 1)
+    const highestHigh = Math.max(...window.map((p) => p.high))
+    const lowestLow = Math.min(...window.map((p) => p.low))
+    const range = highestHigh - lowestLow
+    const value = range === 0 ? 50 : ((series[i].close - lowestLow) / range) * 100
+    rawK.push({ date: series[i].date, value })
+  }
+
+  const k = smoothPoints(rawK, kSmoothing)
+  const d = smoothPoints(k, dPeriod)
+  return { k, d }
+}
+
 function findSwingPoints(series, window) {
   const highs = []
   const lows = []

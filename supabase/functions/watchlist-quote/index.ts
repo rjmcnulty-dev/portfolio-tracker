@@ -40,8 +40,14 @@ const RANGE_PARAMS: Record<string, { interval: string; outputsize: number }> = {
 interface TimeSeriesPoint {
   date: string;
   close: number;
+  high: number;
+  low: number;
 }
 
+// high/low ride along for free — Twelve Data's time_series already returns
+// full OHLC per bar, this just wasn't reading two of those fields until the
+// Stochastic Oscillator (computeStochastic, client-side) needed them; no
+// extra request param or API cost.
 async function fetchSeries(ticker: string, range: string, apiKey: string): Promise<TimeSeriesPoint[]> {
   const { interval, outputsize } = RANGE_PARAMS[range] ?? RANGE_PARAMS["1M"];
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=${interval}&outputsize=${outputsize}&apikey=${apiKey}`;
@@ -52,20 +58,30 @@ async function fetchSeries(ticker: string, range: string, apiKey: string): Promi
     throw new Error(`Twelve Data error: ${body.message || JSON.stringify(body)}`);
   }
 
-  const values: { datetime: string; close: string }[] = body.values ?? [];
+  const values: { datetime: string; close: string; high: string; low: string }[] = body.values ?? [];
   return values
-    .map((v) => ({ date: v.datetime, close: Number(v.close) }))
-    .filter((v) => !Number.isNaN(v.close))
+    .map((v) => ({ date: v.datetime, close: Number(v.close), high: Number(v.high), low: Number(v.low) }))
+    .filter((v) => !Number.isNaN(v.close) && !Number.isNaN(v.high) && !Number.isNaN(v.low))
     .reverse(); // Twelve Data returns newest-first; charts want oldest-first.
 }
 
-async function fetchNextEarningsDate(ticker: string, apiKey: string): Promise<string | null> {
-  const today = new Date().toISOString().slice(0, 10);
+// Wide enough window to cover both needs from a single Finnhub call: 2 years
+// back covers every range option's history (the longest, 200D at daily
+// bars, spans well under that), 6 months forward preserves the existing
+// "next earnings" lookahead. Returns every date in that window, sorted —
+// the caller derives both nextEarningsDate (soonest future one) and
+// earningsDates (whichever fall inside the currently-plotted range) from
+// this same list, so it only costs one API call either way.
+async function fetchEarningsCalendar(ticker: string, apiKey: string): Promise<string[]> {
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
+  const from = twoYearsAgo.toISOString().slice(0, 10);
+
   const sixMonthsOut = new Date();
   sixMonthsOut.setUTCMonth(sixMonthsOut.getUTCMonth() + 6);
   const to = sixMonthsOut.toISOString().slice(0, 10);
 
-  const url = `https://finnhub.io/api/v1/calendar/earnings?from=${today}&to=${to}&symbol=${encodeURIComponent(ticker)}&token=${apiKey}`;
+  const url = `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&symbol=${encodeURIComponent(ticker)}&token=${apiKey}`;
   const res = await fetch(url);
   const body = await res.json();
 
@@ -74,9 +90,7 @@ async function fetchNextEarningsDate(ticker: string, apiKey: string): Promise<st
   }
 
   const entries: { date: string }[] = body.earningsCalendar ?? [];
-  if (!entries.length) return null;
-
-  return entries.map((e) => e.date).sort()[0];
+  return entries.map((e) => e.date).sort();
 }
 
 interface CompanyProfile {
@@ -149,9 +163,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const [series, nextEarningsDate, profile] = await Promise.all([
+    const [series, earningsCalendar, profile] = await Promise.all([
       fetchSeries(ticker, range, twelveDataApiKey),
-      fetchNextEarningsDate(ticker, finnhubApiKey),
+      fetchEarningsCalendar(ticker, finnhubApiKey),
       fetchCompanyProfile(ticker, finnhubApiKey).catch(() => ({
         companyName: null,
         floatShares: null,
@@ -159,9 +173,40 @@ Deno.serve(async (req) => {
       })),
     ]);
 
+    const today = new Date().toISOString().slice(0, 10);
+    const nextEarningsDate = earningsCalendar.find((d) => d >= today) ?? null;
+
+    // Markers for the chart itself — only earnings dates that actually fall
+    // within the plotted range. Daily-bar ranges (1M/3M/6M/1Y/20D/50D/200D)
+    // have plain "YYYY-MM-DD" points that line up with Finnhub's date
+    // format; intraday ranges (1D/1W) use timestamped points
+    // ("2026-08-14 09:30:00"), which never match a plain date here, so this
+    // naturally yields no markers for those rather than a wrong one.
+    const seriesDates = series.map((p) => p.date.slice(0, 10));
+    const seriesStart = seriesDates[0];
+    const seriesEnd = seriesDates[seriesDates.length - 1];
+    const earningsDates =
+      seriesStart && seriesEnd ? earningsCalendar.filter((d) => d >= seriesStart && d <= seriesEnd) : [];
+
+    // Always-on list (independent of the currently selected chart range) of
+    // reported earnings from the past year — most recent first. Distinct
+    // from `earningsDates` above: that one only covers whatever's actually
+    // visible on the current chart (nothing on a 1M view, most of a year on
+    // 1Y/200D); this one is a fixed trailing window for the card's own
+    // "Recent Earnings" text, so it's the same regardless of chart range.
+    const oneYearAgo = new Date();
+    oneYearAgo.setUTCDate(oneYearAgo.getUTCDate() - 365);
+    const oneYearAgoStr = oneYearAgo.toISOString().slice(0, 10);
+    const recentEarningsDates = earningsCalendar
+      .filter((d) => d >= oneYearAgoStr && d <= today)
+      .sort()
+      .reverse();
+
     return json({
       series,
       nextEarningsDate,
+      recentEarningsDates,
+      earningsDates,
       companyName: profile.companyName,
       floatShares: profile.floatShares,
       sharesOutstanding: profile.sharesOutstanding,

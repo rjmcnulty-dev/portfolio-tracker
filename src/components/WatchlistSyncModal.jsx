@@ -17,16 +17,20 @@ export default function WatchlistSyncModal({ onApply, onClose }) {
   const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(2)
+  const [showEarnings, setShowEarnings] = useState(true)
+  const [showStochastic, setShowStochastic] = useState(true)
 
   const indicatorToggles = [
     { key: 'sma20', label: 'MA 20', show: showSMA20, setShow: setShowSMA20 },
     { key: 'sma50', label: 'MA 50', show: showSMA50, setShow: setShowSMA50 },
     { key: 'sma200', label: 'MA 200', show: showSMA200, setShow: setShowSMA200 },
     { key: 'levels', label: 'Support / Resistance', show: showLevels, setShow: setShowLevels },
+    { key: 'earnings', label: 'Earnings', show: showEarnings, setShow: setShowEarnings },
+    { key: 'stochastic', label: 'Stochastic', show: showStochastic, setShow: setShowStochastic },
   ]
 
   function handleApply() {
-    onApply({ range, showSMA20, showSMA50, showSMA200, showLevels, levelCount })
+    onApply({ range, showSMA20, showSMA50, showSMA200, showLevels, levelCount, showEarnings, showStochastic })
     onClose()
   }
 
