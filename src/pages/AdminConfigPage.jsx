@@ -261,6 +261,12 @@ function ConfigRow({ row, onSave }) {
 
 export default function AdminConfigPage() {
   const { configByKey, loading, error, updateConfig } = useAppConfig()
+  const [collapsed, setCollapsed] = useState(new Set())
+  // Defaults to every category collapsed, but only the first time categories
+  // become available (right after the initial config load) — re-running
+  // this on every `categories` change would re-collapse everything the user
+  // had deliberately expanded, e.g. right after a Save triggers a refetch.
+  const initialized = useRef(false)
 
   const grouped = useMemo(() => {
     const byCategory = {}
@@ -276,6 +282,22 @@ export default function AdminConfigPage() {
 
   const categories = Object.keys(grouped).sort()
 
+  useEffect(() => {
+    if (!initialized.current && categories.length) {
+      setCollapsed(new Set(categories))
+      initialized.current = true
+    }
+  }, [categories])
+
+  function toggleCategory(category) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
+
   if (loading) return <p className="page__loading">Loading settings…</p>
   if (error) return <p className="page__error">Error: {error}</p>
   if (!categories.length) {
@@ -288,14 +310,32 @@ export default function AdminConfigPage() {
 
   return (
     <div className="admin-config">
-      {categories.map((category) => (
-        <section key={category} className="admin-config__category">
-          <h3>{category}</h3>
-          {grouped[category].map((row) => (
-            <ConfigRow key={row.key} row={row} onSave={updateConfig} />
-          ))}
-        </section>
-      ))}
+      <div className="admin-config__toolbar">
+        <button type="button" className="btn-link" onClick={() => setCollapsed(new Set(categories))}>
+          Collapse All
+        </button>
+        <button type="button" className="btn-link" onClick={() => setCollapsed(new Set())}>
+          Expand All
+        </button>
+      </div>
+      {categories.map((category) => {
+        const isCollapsed = collapsed.has(category)
+        return (
+          <section key={category} className="admin-config__category">
+            <button
+              type="button"
+              className="admin-config__category-toggle"
+              aria-expanded={!isCollapsed}
+              onClick={() => toggleCategory(category)}
+            >
+              <span className="admin-config__category-chevron">{isCollapsed ? '▸' : '▾'}</span>
+              <h3>{category}</h3>
+            </button>
+            {!isCollapsed &&
+              grouped[category].map((row) => <ConfigRow key={row.key} row={row} onSave={updateConfig} />)}
+          </section>
+        )
+      })}
     </div>
   )
 }

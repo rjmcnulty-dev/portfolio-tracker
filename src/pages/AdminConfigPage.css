@@ -4,10 +4,36 @@
   gap: 24px;
 }
 
-.admin-config__category h3 {
+.admin-config__toolbar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: -8px;
+}
+
+.admin-config__category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.admin-config__category-chevron {
+  color: var(--text-muted);
+  font-size: 18px;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.admin-config__category-toggle h3 {
   font-size: 15px;
   color: var(--navy-dark);
-  margin-bottom: 10px;
+  margin: 0;
 }
 
 .admin-config__row {
