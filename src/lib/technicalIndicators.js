@@ -16,10 +16,31 @@ export function computeSMA(series, period) {
   return points
 }
 
+// On Balance Volume: a running total that adds a bar's volume when it
+// closes higher than the prior bar, subtracts it when lower, and leaves it
+// unchanged on an unmoved close — cumulative buying/selling pressure. Unlike
+// Stochastic, OBV isn't bounded (it's a running sum of daily share volume,
+// so it trends into the millions/billions over a long enough series) — only
+// its direction/slope and divergence from the price trend are meaningful,
+// never its absolute level. First point is seeded at 0, not the first bar's
+// volume, since there's no "prior close" to compare it against yet.
+export function computeOBV(series) {
+  if (!series.length) return []
+  const points = [{ date: series[0].date, value: 0 }]
+  let obv = 0
+  for (let i = 1; i < series.length; i++) {
+    if (series[i].close > series[i - 1].close) obv += series[i].volume
+    else if (series[i].close < series[i - 1].close) obv -= series[i].volume
+    points.push({ date: series[i].date, value: obv })
+  }
+  return points
+}
+
 // A `period`-bar simple moving average of a {date, value} point series —
 // same math as computeSMA above, but over already-computed indicator
-// points (e.g. raw %K) instead of raw price bars.
-function smoothPoints(points, period) {
+// points (e.g. raw %K, or OBV — see WatchlistCard's OBV trend line)
+// instead of raw price bars.
+export function smoothPoints(points, period) {
   if (period <= 1) return points
   const result = []
   let sum = 0

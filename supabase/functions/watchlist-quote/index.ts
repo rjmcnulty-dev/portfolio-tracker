@@ -42,12 +42,13 @@ interface TimeSeriesPoint {
   close: number;
   high: number;
   low: number;
+  volume: number;
 }
 
-// high/low ride along for free — Twelve Data's time_series already returns
-// full OHLC per bar, this just wasn't reading two of those fields until the
-// Stochastic Oscillator (computeStochastic, client-side) needed them; no
-// extra request param or API cost.
+// high/low/volume ride along for free — Twelve Data's time_series already
+// returns full OHLCV per bar, this just wasn't reading these fields until
+// the Stochastic Oscillator (high/low) and On Balance Volume (volume,
+// computeOBV, client-side) needed them; no extra request param or API cost.
 async function fetchSeries(ticker: string, range: string, apiKey: string): Promise<TimeSeriesPoint[]> {
   const { interval, outputsize } = RANGE_PARAMS[range] ?? RANGE_PARAMS["1M"];
   const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=${interval}&outputsize=${outputsize}&apikey=${apiKey}`;
@@ -58,9 +59,18 @@ async function fetchSeries(ticker: string, range: string, apiKey: string): Promi
     throw new Error(`Twelve Data error: ${body.message || JSON.stringify(body)}`);
   }
 
-  const values: { datetime: string; close: string; high: string; low: string }[] = body.values ?? [];
+  const values: { datetime: string; close: string; high: string; low: string; volume: string }[] = body.values ?? [];
   return values
-    .map((v) => ({ date: v.datetime, close: Number(v.close), high: Number(v.high), low: Number(v.low) }))
+    .map((v) => ({
+      date: v.datetime,
+      close: Number(v.close),
+      high: Number(v.high),
+      low: Number(v.low),
+      // Twelve Data omits `volume` for some intraday intervals/tickers; 0 is
+      // the right fallback (OBV's "no change" contribution) rather than NaN
+      // poisoning the running total.
+      volume: Number(v.volume) || 0,
+    }))
     .filter((v) => !Number.isNaN(v.close) && !Number.isNaN(v.high) && !Number.isNaN(v.low))
     .reverse(); // Twelve Data returns newest-first; charts want oldest-first.
 }

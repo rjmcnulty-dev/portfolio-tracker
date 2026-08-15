@@ -1053,6 +1053,29 @@ like the other Stock Watch indicators (`stochastic_tuning`). Computed client-sid
 already has — Twelve Data's `time_series` returns full OHLC by default, `watchlist-quote` just
 wasn't reading `high`/`low` until this needed them, so there's no extra API cost.
 
+**On Balance Volume (OBV)** is a second sub-chart, same reasoning as Stochastic — a running
+total that adds a bar's volume when it closes higher than the prior bar, subtracts it when
+lower, and holds steady on an unchanged close. Unlike Stochastic it isn't bounded (it's a
+cumulative sum of daily share volume, so it trends into the millions/billions over a long
+series) — only its slope and divergence from the price trend are meaningful, never its
+absolute level, so there's no fixed 0-100 axis or overbought/oversold lines the way Stochastic
+has. Computed client-side in `computeOBV`, same file, from each bar's `volume` — also already
+in Twelve Data's response and also newly read by `watchlist-quote` for this, at no extra API
+cost.
+
+Raw OBV is jumpy day to day, so a **Trend** line (a plain `trendPeriod`-bar SMA of OBV — the
+standard "OBV signal line," same idea as Stochastic's %D relative to %K) is plotted alongside
+it, computed via `smoothPoints` (exported from `technicalIndicators.js`, already used
+internally for Stochastic's %K/%D smoothing). Tunable from `/admin`'s App Settings
+(`obv_tuning`, default 20 — the conventional period), same pattern as every other Stock Watch
+indicator's tuning.
+
+Both sub-charts are toggleable per-card via their own chart control ("Stochastic", "OBV"), or
+all at once (regardless of how many subcharts exist) via the **Hide All Subcharts** / **Show
+All Subcharts** button in the page header — a lighter broadcast than "Sync All Charts" next to
+it, since it only flips subchart visibility and leaves each card's own range/MA/levels/
+earnings settings alone.
+
 **Short interest was investigated and isn't available for free.** Neither Twelve Data
 (`/statistics`, where it'd live, is 403 on the free tier — pro/ultra/venture/enterprise
 only) nor Finnhub (`/stock/short-interest` is 403 free-tier too; `/stock/metric` works but
@@ -1192,6 +1215,8 @@ insert into app_config (key, value, category, label, description) values
     'Clustering tolerance and swing-point window for the support/resistance levels drawn on charts, plus how close counts as "near" a level in the Performance Evaluator.'),
   ('stochastic_tuning', '{"kPeriod":14,"kSmoothing":3,"dPeriod":3,"overbought":80,"oversold":20}', 'Stock Watch', 'Stochastic Oscillator Tuning',
     '%K lookback, %K smoothing, and %D signal-line periods for the Stochastic sub-chart, plus the overbought/oversold reference levels drawn on it.'),
+  ('obv_tuning', '{"trendPeriod":20}', 'Stock Watch', 'OBV Trend Period',
+    'Bars in the moving average plotted alongside raw On Balance Volume as its trend/signal line.'),
   ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1}', 'Performance Evaluator', 'Buy/Sell Thresholds',
     'Trigger points for the Buy/Sell suggestion: upside % to target and trend score cutoffs.'),
   ('daily_gains_defaults', '{"defaultDayCount":5,"weekSize":5}', 'Daily Gains', 'Daily Gains Defaults',

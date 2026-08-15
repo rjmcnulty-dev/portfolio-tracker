@@ -13,6 +13,10 @@ export default function StockWatchPage() {
   // Per-ticker rather than one shared object, purely so each card's own
   // useEffect only re-applies when ITS entry's version changes.
   const [syncMap, setSyncMap] = useState(new Map())
+  // A single shared object (not per-ticker like syncMap above) is fine here
+  // — every card is meant to react identically to this one, unlike the full
+  // Sync modal, which doesn't need per-card version isolation.
+  const [subchartsBroadcast, setSubchartsBroadcast] = useState({ version: 0, visible: true })
 
   // Every fetch — initial mount, a manual range click, the per-card Refresh
   // button, or this page's Sync modal — now goes through the same shared
@@ -24,6 +28,13 @@ export default function StockWatchPage() {
   const secondsUntilNextWindow = queueStatus.windowEndsAt
     ? Math.max(0, Math.ceil((queueStatus.windowEndsAt - Date.now()) / 1000))
     : 0
+
+  // Toggles every subchart (Stochastic, OBV, and any future ones) on every
+  // card at once, without touching range/MA/levels/earnings — see
+  // WatchlistCard's separate subchartsBroadcast effect.
+  function handleToggleAllSubcharts() {
+    setSubchartsBroadcast((prev) => ({ visible: !prev.visible, version: prev.version + 1 }))
+  }
 
   function handleApplySync(settings) {
     const tickers = watchlist.map((item) => item.ticker)
@@ -63,9 +74,14 @@ export default function StockWatchPage() {
           </p>
         </div>
         {watchlist.length > 0 && (
-          <button className="btn btn--ghost" onClick={() => setShowSyncModal(true)}>
-            Sync All Charts
-          </button>
+          <div className="filters">
+            <button className="btn btn--ghost" onClick={handleToggleAllSubcharts}>
+              {subchartsBroadcast.visible ? 'Hide All Subcharts' : 'Show All Subcharts'}
+            </button>
+            <button className="btn btn--ghost" onClick={() => setShowSyncModal(true)}>
+              Sync All Charts
+            </button>
+          </div>
         )}
       </header>
 
@@ -101,6 +117,7 @@ export default function StockWatchPage() {
               onRemove={removeTicker}
               onSaveNotes={updateNotes}
               syncSettings={syncMap.get(item.ticker)}
+              subchartsBroadcast={subchartsBroadcast}
             />
           ))}
         </div>

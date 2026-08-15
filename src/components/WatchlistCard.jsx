@@ -11,7 +11,14 @@ import {
   YAxis,
 } from 'recharts'
 import { useStockQuote } from '../hooks/useStockQuote'
-import { computeSMA, computeStochastic, findSupportResistance, mergeIndicators } from '../lib/technicalIndicators'
+import {
+  computeOBV,
+  computeSMA,
+  computeStochastic,
+  findSupportResistance,
+  mergeIndicators,
+  smoothPoints,
+} from '../lib/technicalIndicators'
 import { useConfigValue } from '../hooks/useAppConfig'
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
@@ -19,6 +26,7 @@ import './WatchlistCard.css'
 const DEFAULT_MA_PERIODS = [20, 50, 200]
 const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
 const DEFAULT_STOCHASTIC_TUNING = { kPeriod: 14, kSmoothing: 3, dPeriod: 3, overbought: 80, oversold: 20 }
+const DEFAULT_OBV_TUNING = { trendPeriod: 20 }
 
 // 20D/50D/200D fetch enough history (2x the period — see watchlist-quote's
 // RANGE_PARAMS) that the matching moving average (MA20/50/200) renders as a
@@ -33,6 +41,19 @@ function formatCurrency(value) {
   const num = Number(value)
   if (Number.isNaN(num)) return '—'
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+// OBV is a running sum of daily share volume, so it's routinely in the
+// millions/billions — an axis of raw digits would be unreadable.
+function formatVolume(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  const sign = num < 0 ? '-' : ''
+  const abs = Math.abs(num)
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1)}B`
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K`
+  return `${sign}${abs}`
 }
 
 function formatXAxisTick(value, range) {
@@ -317,10 +338,63 @@ function StochasticChart({ chartData, range, overbought, oversold, height }) {
   )
 }
 
-export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings }) {
+function ObvTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="watchlist-card__tooltip">
+      <p className="watchlist-card__tooltip-label">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey} className="watchlist-card__tooltip-row" style={{ color: entry.color }}>
+          {entry.name}: {entry.value == null ? '—' : formatVolume(entry.value)}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// Separate panel, same reasoning as StochasticChart — OBV is a running sum
+// of share volume (routinely in the millions/billions), incompatible with
+// both the price chart's dollar axis and Stochastic's fixed 0-100 one, so it
+// gets its own auto-scaled y-axis. Only the trend/slope is meaningful, never
+// the absolute level, which is why there's no reference line here the way
+// Stochastic has overbought/oversold thresholds — the trend line (a plain
+// SMA of OBV, the standard "OBV signal line") is what actually shows the
+// underlying direction, since raw OBV is jumpy day to day.
+function ObvChart({ chartData, range, trendPeriod, height }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e9ee" />
+        <XAxis
+          dataKey="date"
+          tickFormatter={(v) => formatXAxisTick(v, range)}
+          stroke="var(--text-muted)"
+          fontSize={11}
+          minTickGap={30}
+        />
+        <YAxis domain={['auto', 'auto']} tickFormatter={formatVolume} stroke="var(--text-muted)" fontSize={11} width={70} />
+        <Tooltip content={<ObvTooltip />} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line type="monotone" dataKey="obv" name="OBV" stroke="var(--green)" dot={false} strokeWidth={1.5} connectNulls={false} />
+        <Line
+          type="monotone"
+          dataKey="obvTrend"
+          name={`Trend (${trendPeriod})`}
+          stroke="var(--gold)"
+          dot={false}
+          strokeWidth={1.5}
+          connectNulls={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings, subchartsBroadcast }) {
   const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
+  const obvTuning = useConfigValue('obv_tuning', DEFAULT_OBV_TUNING)
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
@@ -329,6 +403,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   const [levelCount, setLevelCount] = useState(srTuning.maxLevelsDefault)
   const [showEarnings, setShowEarnings] = useState(true)
   const [showStochastic, setShowStochastic] = useState(true)
+  const [showOBV, setShowOBV] = useState(true)
   const [expanded, setExpanded] = useState(false)
   // config loads asynchronously, so `srTuning.maxLevelsDefault` is still the
   // hardcoded fallback at the moment the useState above reads it — this
@@ -358,8 +433,20 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     setLevelCount(syncSettings.levelCount)
     setShowEarnings(syncSettings.showEarnings)
     setShowStochastic(syncSettings.showStochastic)
+    setShowOBV(syncSettings.showOBV)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncSettings?.version])
+
+  // A lighter-weight broadcast than the full Sync modal above — the page's
+  // "Hide/Show All Subcharts" button just flips every subchart's visibility
+  // together, leaving range/MA/levels/earnings alone. Add any future
+  // subchart's setter here too.
+  useEffect(() => {
+    if (!subchartsBroadcast) return
+    setShowStochastic(subchartsBroadcast.visible)
+    setShowOBV(subchartsBroadcast.visible)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subchartsBroadcast?.version])
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
   const [notesDirty, setNotesDirty] = useState(false)
@@ -395,6 +482,8 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     () => computeStochastic(series, stochasticTuning.kPeriod, stochasticTuning.kSmoothing, stochasticTuning.dPeriod),
     [series, stochasticTuning],
   )
+  const obv = useMemo(() => computeOBV(series), [series])
+  const obvTrend = useMemo(() => smoothPoints(obv, obvTuning.trendPeriod), [obv, obvTuning])
 
   const chartData = useMemo(
     () =>
@@ -404,8 +493,10 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
         { key: 'sma200', points: sma200 },
         { key: 'stochK', points: stochastic.k },
         { key: 'stochD', points: stochastic.d },
+        { key: 'obv', points: obv },
+        { key: 'obvTrend', points: obvTrend },
       ]),
-    [series, sma20, sma50, sma200, stochastic],
+    [series, sma20, sma50, sma200, stochastic, obv, obvTrend],
   )
 
   function handleLevelCountChange(n) {
@@ -437,6 +528,13 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
       show: showStochastic,
       setShow: setShowStochastic,
       disabled: !stochastic.k.length,
+    },
+    {
+      key: 'obv',
+      label: 'OBV',
+      show: showOBV,
+      setShow: setShowOBV,
+      disabled: !obv.length,
     },
   ]
 
@@ -530,6 +628,12 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
               />
             </>
           )}
+          {showOBV && obv.length > 0 && (
+            <>
+              <span className="watchlist-card__stochastic-label">On Balance Volume (Trend: {obvTuning.trendPeriod})</span>
+              <ObvChart chartData={chartData} range={range} trendPeriod={obvTuning.trendPeriod} height={100} />
+            </>
+          )}
         </>
       )}
 
@@ -610,6 +714,12 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
                       oversold={stochasticTuning.oversold}
                       height={160}
                     />
+                  </>
+                )}
+                {showOBV && obv.length > 0 && (
+                  <>
+                    <span className="watchlist-card__stochastic-label">On Balance Volume (Trend: {obvTuning.trendPeriod})</span>
+                    <ObvChart chartData={chartData} range={range} trendPeriod={obvTuning.trendPeriod} height={160} />
                   </>
                 )}
               </>
