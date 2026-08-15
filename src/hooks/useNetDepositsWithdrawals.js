@@ -25,12 +25,13 @@ export function useNetDepositsWithdrawals(account, rangeStart, rangeEnd) {
     const requestId = ++latestRequestId.current
     setLoading(true)
 
-    const { data, error: fetchError } = await supabase
-      .from('deposits')
-      .select('amount')
-      .eq('account', account)
-      .gte('deposit_date', rangeStart)
-      .lte('deposit_date', rangeEnd)
+    // account === 'All' means every account, not a literal account name —
+    // same convention as useDeposits/usePortfolioValueHistory.
+    let query = supabase.from('deposits').select('amount').gte('deposit_date', rangeStart).lte('deposit_date', rangeEnd)
+    if (account !== 'All') {
+      query = query.eq('account', account)
+    }
+    const { data, error: fetchError } = await query
 
     if (requestId !== latestRequestId.current) return
 

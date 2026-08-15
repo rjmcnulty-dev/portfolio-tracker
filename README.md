@@ -661,6 +661,28 @@ so it can take a few minutes with more than a handful of tickers. A day where an
 position's ticker has no price data yet (e.g. a brand-new listing) is skipped rather than
 written as a misleading $0 — the chart will just have a gap there.
 
+Above the chart, a **Deposits/Withdrawals** row (same shape as the one on the Daily Gains
+card — see below, and `useNetDepositsWithdrawals`) sums Deposits, Withdrawals, and Net for
+whatever range is currently selected (Daily/Monthly/Yearly/All Time). Next to the big total
+value and its Change figure, a **Net Gain/Loss** line is `Change − Net Deposits/Withdrawals`
+for that same range — the same "back the cash flows out of Change" idea as the Daily Gains
+card's Net Gain/Loss stat, reusing the `change` and `netAmount` already computed for the
+header rather than a separate query.
+
+The chart itself is a **stacked area**, not a single line: a **Deposits/Withdrawals** layer
+(blue) is the net capital contributed to the account as of each day — all-time, not clipped
+to the visible range, so even the Daily view shows the true baseline of money put in — and a
+**Net Gain/Loss** layer (green) stacks on top of it, so the combined top edge is still
+`total_value`. Net Gain/Loss is `total_value − cumulative net deposits/withdrawals as of that
+day`, i.e. investment performance with capital in/out backed out — the same idea as the Daily
+Gains card's Net Gain/Loss stat, but as a running series across the whole chart instead of a
+single before/after figure. Both layers are computed client-side in `PortfolioValueChart` by
+merging the (already-fetched) `deposits` list against `history`; no new query or table. If
+Net Gain/Loss goes negative (the account is worth less than was put into it), the top edge
+dips below the deposits layer — Recharts renders that correctly, but the fill color doesn't
+switch to red for that segment, so lean on the Net Gain/Loss figure or the tooltip to confirm
+a dip is really a loss and not just a rendering quirk.
+
 ## Daily gains
 
 The **Daily Gains** table on each account page (below that account's Value chart) is a
