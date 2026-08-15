@@ -1,5 +1,6 @@
 import { useAuth } from '../hooks/useAuth'
 import AdminConfigPage from './AdminConfigPage'
+import AdminSecretsPage from './AdminSecretsPage'
 
 export default function AdminPage() {
   const { user, signOut } = useAuth()
@@ -19,10 +20,19 @@ export default function AdminPage() {
         <header className="page__header">
           <h2>App Settings</h2>
           <p className="page__subtitle">
-            Business-logic constants used across the app — edited here as raw JSON, effective immediately.
+            Business-logic constants used across the app — edited as form fields below, effective immediately.
           </p>
         </header>
         <AdminConfigPage />
+      </section>
+      <section className="page__section">
+        <header className="page__header">
+          <h2>Secrets</h2>
+          <p className="page__subtitle">
+            Twelve Data and Finnhub API keys — encrypted at rest, never shown again after saving.
+          </p>
+        </header>
+        <AdminSecretsPage />
       </section>
     </div>
   )

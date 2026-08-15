@@ -11,13 +11,13 @@
 //   SUPABASE_URL=... SUPABASE_ANON_KEY=... TWELVE_DATA_API_KEY=... npm run portfolio:backfill
 import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
+import { getSecret } from './lib/secrets.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !TWELVE_DATA_API_KEY) {
-  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY, TWELVE_DATA_API_KEY')
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY')
   process.exit(1)
 }
 
@@ -53,8 +53,8 @@ function yesterday() {
 }
 
 // Fetches full daily close history for one ticker, oldest first.
-async function fetchDailyHistory(ticker) {
-  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=1day&outputsize=${OUTPUT_SIZE}&apikey=${TWELVE_DATA_API_KEY}`
+async function fetchDailyHistory(ticker, apiKey) {
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=1day&outputsize=${OUTPUT_SIZE}&apikey=${apiKey}`
   const res = await fetch(url)
   const body = await res.json()
 
@@ -69,14 +69,14 @@ async function fetchDailyHistory(ticker) {
     .reverse() // Twelve Data returns newest-first.
 }
 
-async function fetchAllHistories(tickers, maxSymbolsPerMinute, rateLimitWindowMs) {
+async function fetchAllHistories(tickers, apiKey, maxSymbolsPerMinute, rateLimitWindowMs) {
   const historyByTicker = new Map()
 
   for (let i = 0; i < tickers.length; i += maxSymbolsPerMinute) {
     const chunk = tickers.slice(i, i + maxSymbolsPerMinute)
     for (const ticker of chunk) {
       console.log(`Fetching history for ${ticker}…`)
-      historyByTicker.set(ticker, await fetchDailyHistory(ticker))
+      historyByTicker.set(ticker, await fetchDailyHistory(ticker, apiKey))
     }
 
     const hasMoreChunks = i + maxSymbolsPerMinute < tickers.length
@@ -126,6 +126,15 @@ function computeHoldingsValue(quantityByTicker, date, priceCursors) {
 }
 
 async function main() {
+  // Prefers the encrypted DB value (set from /admin's Secrets tab, requires
+  // SUPABASE_SERVICE_ROLE_KEY here too) over the plain env var, so migrating
+  // to encrypted secrets is zero-downtime.
+  const twelveDataApiKey = (await getSecret('twelve_data_api_key')) ?? process.env.TWELVE_DATA_API_KEY
+  if (!twelveDataApiKey) {
+    console.error('No Twelve Data API key available (checked /admin-managed secret, then TWELVE_DATA_API_KEY env var)')
+    process.exit(1)
+  }
+
   const { data: trades, error: tradesError } = await supabase
     .from('trades')
     .select('ticker, trade_type, quantity, price, fees, cost_basis, trade_date, account')
@@ -158,7 +167,7 @@ async function main() {
   console.log(`Backfilling ${startDate} through ${endDate} for ${tickers.length} ticker(s): ${tickers.join(', ')}`)
 
   const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
-  const historyByTicker = await fetchAllHistories(tickers, rateLimit.maxPerWindow, rateLimit.windowMs)
+  const historyByTicker = await fetchAllHistories(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs)
   const priceCursors = new Map([...historyByTicker].map(([ticker, history]) => [ticker, makePriceCursor(history)]))
 
   // ticker_price_history rides along for free — this history was already

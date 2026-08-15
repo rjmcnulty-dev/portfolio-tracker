@@ -1,12 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
+import { getSecret } from './lib/secrets.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !TWELVE_DATA_API_KEY) {
-  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY, TWELVE_DATA_API_KEY')
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY')
   process.exit(1)
 }
 
@@ -22,12 +22,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function fetchQuotes(tickers, maxSymbolsPerMinute, rateLimitWindowMs) {
+async function fetchQuotes(tickers, apiKey, maxSymbolsPerMinute, rateLimitWindowMs) {
   const quotes = {}
 
   for (let i = 0; i < tickers.length; i += maxSymbolsPerMinute) {
     const chunk = tickers.slice(i, i + maxSymbolsPerMinute)
-    const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(chunk.join(','))}&apikey=${TWELVE_DATA_API_KEY}`
+    const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(chunk.join(','))}&apikey=${apiKey}`
     const res = await fetch(url)
     const body = await res.json()
 
@@ -95,6 +95,15 @@ function computeCashPosition(deposits, trades) {
 }
 
 async function main() {
+  // Prefers the encrypted DB value (set from /admin's Secrets tab, requires
+  // SUPABASE_SERVICE_ROLE_KEY here too) over the plain env var, so migrating
+  // to encrypted secrets is zero-downtime.
+  const twelveDataApiKey = (await getSecret('twelve_data_api_key')) ?? process.env.TWELVE_DATA_API_KEY
+  if (!twelveDataApiKey) {
+    console.error('No Twelve Data API key available (checked /admin-managed secret, then TWELVE_DATA_API_KEY env var)')
+    process.exit(1)
+  }
+
   const { data: trades, error: tradesError } = await supabase
     .from('trades')
     .select('ticker, trade_type, quantity, price, fees, cost_basis, account')
@@ -110,7 +119,7 @@ async function main() {
   }
 
   const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
-  const quotes = await fetchQuotes(tickers, rateLimit.maxPerWindow, rateLimit.windowMs)
+  const quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs)
 
   const asOf = new Date().toISOString().slice(0, 10)
   const now = new Date().toISOString()

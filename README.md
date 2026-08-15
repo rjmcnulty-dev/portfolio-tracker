@@ -1180,8 +1180,100 @@ hardcoded-value fallback pattern as the client side — no encryption involved, 
 secret.
 
 `/admin`'s **App Settings** tab (`src/pages/AdminConfigPage.jsx`) groups these by `category`,
-with one form per row (a JSON-array editor for list-shaped values like `deposit_types`) and
-shows each row's `updated_at`.
+with a structured form per row rather than raw JSON — it inspects each value's shape at
+render time and picks a control accordingly: a number/text input for a primitive, a labeled
+field grid for an object, and a repeatable add/remove list for an array (of primitives, or —
+for something like `recurring_frequencies` — of objects, rendered as one inline mini-form per
+item). This is generic over shape rather than hardcoded per key, so a new `app_config` row
+added later still gets a reasonable editor with no UI changes. Shows each row's `updated_at`.
+
+### Encrypted secrets
+
+The Twelve Data and Finnhub API keys can also be set from `/admin`'s **Secrets** tab instead
+of (or in addition to) the CLI/GitHub-UI flows described elsewhere in this README — encrypted
+at rest, and the browser never sees a saved value again, only whether it's configured and
+when it was last updated.
+
+**Threat model, stated plainly**: with no user accounts beyond the one admin (see "Admin /
+Auth"), *writing* a secret from `/admin` is genuinely gated — `manage-secret` requires a real
+Supabase Auth session, both at the platform level (`verify_jwt = true`) and via an explicit
+in-function check (see below — `verify_jwt` alone isn't sufficient, since the public anon key
+is itself technically a valid JWT for the project). *Reading* a secret
+back in decrypted form is a different, narrower guarantee: nothing reachable from the browser
+can ever do that (the `manage-secret` function that the browser calls never decrypts, only
+encrypts-and-stores); the only path that decrypts and returns a value,
+`reveal-secret`, is gated by possession of the project's own service-role key, which the
+GitHub Actions scripts hold (as their own dedicated secret) and the browser never does. That's
+the same trust tier every other Edge Function in this app already operates at — this doesn't
+add a new class of exposure, it closes off the browser specifically as an attack surface for
+these two keys.
+
+**One-time setup** — generate a master encryption key and set it in both places that need to
+decrypt (Supabase Edge Functions, and the GitHub Actions scripts):
+
+```bash
+# Generates 32 random bytes, base64-encoded.
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+```bash
+npx supabase secrets set CONFIG_ENCRYPTION_KEY=<the generated value>
+```
+
+Then add two **new** GitHub Actions repository secrets (Settings → Secrets and variables →
+Actions): `CONFIG_ENCRYPTION_KEY` (the same value) and `SUPABASE_SERVICE_ROLE_KEY` (Project
+Settings → API → `service_role` key on the Supabase dashboard — needed so the scripts can call
+`reveal-secret`, which only responds to that key).
+
+Run the SQL below once in the Supabase SQL editor:
+
+```sql
+create table if not exists app_secrets (
+  key text primary key,
+  ciphertext text not null,
+  updated_at timestamptz not null default now()
+);
+alter table app_secrets enable row level security;
+-- Deliberately no policies at all: only the service-role key (which
+-- bypasses RLS, same as every Edge Function's own DB client already does)
+-- can touch this table — not even an authenticated admin session can read
+-- or write it directly via PostgREST, only through manage-secret/
+-- reveal-secret, which control exactly what's ever returned.
+```
+
+**Encryption**: AES-256-GCM via Deno's Web Crypto API, in
+`supabase/functions/_shared/secrets.ts` — the only code anywhere in this project that
+encrypts or decrypts. Ciphertext is stored as `base64(iv) + "." + base64(ciphertext‖tag)`.
+
+**Edge Functions**:
+- `manage-secret` (`verify_jwt = true` in `supabase/config.toml`, **plus** an explicit
+  `auth.getUser()` check inside the function) — the only function in this project that
+  requires a real login. `verify_jwt = true` alone isn't enough: it only rejects a request
+  with no valid-for-this-project JWT at all, and the public anon key *is* a valid JWT (same
+  signing secret, role `anon`) — so a request carrying just the anon key would otherwise pass
+  the platform gate. The function additionally resolves the caller's token against Supabase
+  Auth to confirm it's a genuine user session, not just any project-signed token; verified by
+  hand while building this (an anon-key-only request got a clean `401 Unauthorized` after this
+  check was added, where it hadn't been rejected before). `{action:"save", key, value}`
+  encrypts and upserts, returning `{ok, updatedAt, preview}` where `preview` is the last 4
+  characters of what was just typed (an echo of input, never a read of stored ciphertext).
+  `{action:"status", key}` returns `{isSet, updatedAt}` only — it never decrypts.
+- `reveal-secret` (`verify_jwt = false`; manually checks the request's `Authorization` header
+  equals `Bearer <service-role key>`, 401s otherwise) — `{key}` decrypts and returns
+  `{value}`. Exists only for the GitHub Actions scripts below, so Node never needs its own
+  AES-GCM implementation.
+- `refresh-prices`, `watchlist-quote`, `evaluate-performance`, `company-names` — each now
+  tries the encrypted DB value first (via `_shared/secrets.ts`'s `getDecryptedSecret`,
+  in-process, no HTTP round-trip) and falls back to its existing `Deno.env.get(...)` Supabase
+  secret if nothing's been saved to `/admin` yet. This makes adopting encrypted secrets
+  zero-downtime — every function keeps working exactly as before until you actually set a
+  value from `/admin`, at which point the DB value takes over.
+
+**GitHub Actions scripts** (`fetch-prices.mjs`, `backfill-portfolio-history.mjs`): a new
+`scripts/lib/secrets.mjs` calls `reveal-secret` (needs `SUPABASE_SERVICE_ROLE_KEY` and
+`CONFIG_ENCRYPTION_KEY` set as above), falling back to the existing `TWELVE_DATA_API_KEY`
+GitHub secret if either new secret is missing or nothing's been saved yet — same
+zero-downtime transition as the Edge Functions.
 
 ## App structure
 
@@ -1201,6 +1293,7 @@ src/
     useStockQuote.js        # Live chart series + next earnings date for one ticker/range, via watchlist-quote
     usePortfolio.js       # KPIs, allocation %, P&L-by-ticker, holdings, and cash position; overlays live prices onto open lots
     useAuth.js               # Mirrors supabase.auth session state — see "Admin / Auth"
+    useAppConfig.js          # useAppConfig()/useConfigValue() — reads app_config, see "App settings"
   components/
     RequireAuth.jsx        # Route wrapper: redirects to /login when signed out — see "Admin / Auth"
     Layout.jsx            # Sidebar nav (incl. Add Account) + main content outlet
@@ -1231,16 +1324,26 @@ src/
     StockWatchPage.jsx      # Watchlist: add ticker, view chart/earnings/notes (/watch)
     LoginPage.jsx            # Standalone (no sidebar) sign-in form — see "Admin / Auth"
     AdminPage.jsx            # Login-gated app config (/admin) — see "Admin / Auth"
+    AdminConfigPage.jsx      # App Settings tab: app_config rows grouped by category, shape-aware form editor
+    AdminSecretsPage.jsx     # Secrets tab: masked Twelve Data/Finnhub key entry — see "Encrypted secrets"
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
   materialize-trades.mjs    # Weekday job: trade_schedules + ticker_prices -> trades (see "Recurring trades")
+  lib/
+    config.mjs               # getConfig() — reads app_config, shared by the scripts above
+    secrets.mjs               # getSecret() — calls reveal-secret, see "Encrypted secrets"
 supabase/
   functions/
+    _shared/
+      config.ts               # getConfig() — Edge Function counterpart of scripts/lib/config.mjs
+      secrets.ts               # encrypt/decrypt/getDecryptedSecret — see "Encrypted secrets"
     refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
     materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
     materialize-trades/      # On-demand version of materialize-trades.mjs, called by "Sync Now"
     watchlist-quote/         # Live chart + earnings lookup for Stock Watch (see "Stock Watch")
+    manage-secret/            # Save/status for encrypted secrets, called from /admin — see "Encrypted secrets"
+    reveal-secret/             # Decrypts a secret for the GitHub Actions scripts — see "Encrypted secrets"
 ```
 
 ## Deployment
@@ -1252,4 +1355,6 @@ repository secrets (Settings → Secrets and variables → Actions) so the build
 inject them. Add `TWELVE_DATA_API_KEY` as well so `.github/workflows/refresh-prices.yml`
 can run (see "Daily price refresh" above). `.github/workflows/materialize-deposits.yml` and
 `.github/workflows/materialize-trades.yml` need no extra secret beyond the two Supabase
-ones.
+ones. If you've set up encrypted secrets (see "Encrypted secrets" above), also add
+`SUPABASE_SERVICE_ROLE_KEY` and `CONFIG_ENCRYPTION_KEY` — without them, `refresh-prices.yml`
+still works fine by falling back to the plain `TWELVE_DATA_API_KEY` secret.

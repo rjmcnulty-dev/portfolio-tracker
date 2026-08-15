@@ -64,3 +64,21 @@ entrypoint = "./functions/evaluate-performance/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/evaluate-performance/*.html" ]
+
+[functions.manage-secret]
+enabled = true
+# Unlike every other function here, this one requires a real Supabase Auth
+# JWT — the platform gateway rejects any request without one before this
+# function's code runs at all. See README's "Encrypted secrets" section.
+verify_jwt = true
+import_map = "./functions/manage-secret/deno.json"
+entrypoint = "./functions/manage-secret/index.ts"
+
+[functions.reveal-secret]
+enabled = true
+# Gated manually inside the function (checks the service-role key), not by
+# the platform's JWT verification — its caller is a script, not a logged-in
+# user. See README's "Encrypted secrets" section.
+verify_jwt = false
+import_map = "./functions/reveal-secret/deno.json"
+entrypoint = "./functions/reveal-secret/index.ts"

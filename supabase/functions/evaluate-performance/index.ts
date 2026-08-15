@@ -14,6 +14,7 @@
 // client-side JS.
 import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../_shared/config.ts";
+import { getDecryptedSecret } from "../_shared/secrets.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -163,17 +164,24 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: CORS_HEADERS });
   }
 
-  const apiKey = Deno.env.get("TWELVE_DATA_API_KEY");
-  if (!apiKey) {
-    return json({ error: "TWELVE_DATA_API_KEY is not configured" }, 500);
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "Supabase runtime env vars are missing" }, 500);
   }
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  // Prefers the encrypted DB value (set from /admin's Secrets tab) over the
+  // Supabase secret, falling back to the latter if nothing's been saved to
+  // /admin yet — so migrating to encrypted secrets is zero-downtime.
+  const masterKey = Deno.env.get("CONFIG_ENCRYPTION_KEY");
+  const apiKey =
+    (masterKey ? await getDecryptedSecret(supabase, "twelve_data_api_key", masterKey) : null) ??
+    Deno.env.get("TWELVE_DATA_API_KEY");
+  if (!apiKey) {
+    return json({ error: "No Twelve Data API key configured (set one from /admin or TWELVE_DATA_API_KEY)" }, 500);
+  }
+
   const rateLimit = await getConfig(supabase, "twelve_data_rate_limit", DEFAULT_RATE_LIMIT);
   const maPeriods = await getConfig(supabase, "moving_average_periods", DEFAULT_MA_PERIODS);
   const srTuning = await getConfig(supabase, "support_resistance_tuning", DEFAULT_SR_TUNING);

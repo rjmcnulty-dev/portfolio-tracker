@@ -43,11 +43,57 @@
   font-size: 12px;
 }
 
-.admin-config__row-textarea {
+.config-object {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 16px;
+}
+
+.config-object--inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  flex: 1;
+}
+
+.config-object--inline .config-object__field {
+  min-width: 110px;
+  flex: 1;
+}
+
+.config-object__field input[type='text'],
+.config-object__field input[type='number'] {
   width: 100%;
-  min-height: 90px;
-  font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 12.5px;
+}
+
+.config-array {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.config-array__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.config-array__item input[type='text'],
+.config-array__item input[type='number'] {
+  flex: 1;
+}
+
+.config-array__remove {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .admin-config__row-error {

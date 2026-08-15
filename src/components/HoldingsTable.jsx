@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './HoldingsTable.css'
@@ -81,6 +81,15 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
   )
   const [pageSize, setPageSize] = useState(defaultPageSize)
   const [page, setPage] = useState(1)
+  // config loads asynchronously, so `defaultPageSize` is still the hardcoded
+  // fallback at the moment the useState above reads it — this re-applies the
+  // real default once app_config arrives, but only until the user actually
+  // touches the page-size selector themselves (handlePageSizeChange below).
+  const pageSizeTouched = useRef(false)
+
+  useEffect(() => {
+    if (!pageSizeTouched.current) setPageSize(defaultPageSize)
+  }, [defaultPageSize])
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleKeys))
@@ -125,6 +134,7 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
   }, [sorted, page, pageSize])
 
   function handlePageSizeChange(value) {
+    pageSizeTouched.current = true
     setPageSize(value === 'All' ? 'All' : Number(value))
     setPage(1)
   }

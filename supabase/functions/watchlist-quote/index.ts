@@ -1,8 +1,12 @@
 // Powers the Stock Watch page's chart + next-earnings-date lookup. Called
 // on demand from the browser (ticker add, range toggle) — nothing here is
 // cached or scheduled, unlike the price-refresh/materialize jobs. Both
-// TWELVE_DATA_API_KEY and FINNHUB_API_KEY stay Supabase secrets so neither
-// reaches client-side JS.
+// TWELVE_DATA_API_KEY and FINNHUB_API_KEY stay Supabase secrets (or, once
+// set from /admin, encrypted app_secrets rows) so neither reaches
+// client-side JS.
+import { createClient } from "@supabase/supabase-js";
+import { getDecryptedSecret } from "../_shared/secrets.ts";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -109,10 +113,25 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: CORS_HEADERS });
   }
 
-  const twelveDataApiKey = Deno.env.get("TWELVE_DATA_API_KEY");
-  const finnhubApiKey = Deno.env.get("FINNHUB_API_KEY");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    return json({ error: "Supabase runtime env vars are missing" }, 500);
+  }
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  // Prefers the encrypted DB value (set from /admin's Secrets tab) over the
+  // Supabase secret, falling back to the latter if nothing's been saved to
+  // /admin yet — so migrating to encrypted secrets is zero-downtime.
+  const masterKey = Deno.env.get("CONFIG_ENCRYPTION_KEY");
+  const twelveDataApiKey =
+    (masterKey ? await getDecryptedSecret(supabase, "twelve_data_api_key", masterKey) : null) ??
+    Deno.env.get("TWELVE_DATA_API_KEY");
+  const finnhubApiKey =
+    (masterKey ? await getDecryptedSecret(supabase, "finnhub_api_key", masterKey) : null) ??
+    Deno.env.get("FINNHUB_API_KEY");
   if (!twelveDataApiKey || !finnhubApiKey) {
-    return json({ error: "TWELVE_DATA_API_KEY or FINNHUB_API_KEY is not configured" }, 500);
+    return json({ error: "No Twelve Data / Finnhub API key configured (set them from /admin, or as Supabase secrets)" }, 500);
   }
 
   let ticker: string | null = null;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -225,6 +225,15 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(srTuning.maxLevelsDefault)
   const [expanded, setExpanded] = useState(false)
+  // config loads asynchronously, so `srTuning.maxLevelsDefault` is still the
+  // hardcoded fallback at the moment the useState above reads it — this
+  // re-applies the real default once app_config arrives, but only until the
+  // user (or the Sync modal, below) has actually set a level count.
+  const levelCountTouched = useRef(false)
+
+  useEffect(() => {
+    if (!levelCountTouched.current) setLevelCount(srTuning.maxLevelsDefault)
+  }, [srTuning.maxLevelsDefault])
 
   // Cards otherwise manage these settings independently (so you can e.g.
   // view one ticker on 1Y and another on 1M at the same time) — the Sync
@@ -240,6 +249,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     setShowSMA50(syncSettings.showSMA50)
     setShowSMA200(syncSettings.showSMA200)
     setShowLevels(syncSettings.showLevels)
+    levelCountTouched.current = true
     setLevelCount(syncSettings.levelCount)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncSettings?.version])
@@ -274,6 +284,11 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
       ]),
     [series, sma20, sma50, sma200],
   )
+
+  function handleLevelCountChange(n) {
+    levelCountTouched.current = true
+    setLevelCount(n)
+  }
 
   const indicatorToggles = [
     { key: 'sma20', label: `MA ${maPeriods[0]}`, show: showSMA20, setShow: setShowSMA20, disabled: sma20.length === 0 },
@@ -342,7 +357,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
         setRange={setRange}
         indicators={indicatorToggles}
         levelCount={levelCount}
-        setLevelCount={setLevelCount}
+        setLevelCount={handleLevelCountChange}
         showLevels={showLevels}
       />
 
@@ -399,7 +414,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
         setRange={setRange}
         indicators={indicatorToggles}
         levelCount={levelCount}
-        setLevelCount={setLevelCount}
+        setLevelCount={handleLevelCountChange}
         showLevels={showLevels}
       />
 
