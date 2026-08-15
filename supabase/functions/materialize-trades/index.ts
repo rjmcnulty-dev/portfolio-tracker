@@ -8,6 +8,7 @@
 // server-side job (auth verification of the caller is handled by the
 // platform gateway via `verify_jwt = false` + the public apikey header).
 import { createClient } from "@supabase/supabase-js";
+import { getConfig } from "../_shared/config.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,21 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const STEP_DAYS: Record<string, number> = { daily: 1, weekly: 7, biweekly: 14 };
+// DB-backed via app_config's recurring_frequencies (each entry's stepDays;
+// "monthly" has none since it's calendar-month math, not a fixed day count)
+// — this is the pre-config fallback.
+const DEFAULT_FREQUENCIES = [
+  { value: "daily", label: "Daily", stepDays: 1 },
+  { value: "weekly", label: "Weekly", stepDays: 7 },
+  { value: "biweekly", label: "Biweekly", stepDays: 14 },
+  { value: "monthly", label: "Monthly", stepDays: null },
+];
+
+function stepDaysMapFrom(frequencies: { value: string; stepDays: number | null }[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const f of frequencies) if (f.stepDays != null) map[f.value] = f.stepDays;
+  return map;
+}
 
 function addDays(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -52,7 +67,7 @@ interface Schedule {
   notes: string | null;
 }
 
-function occurrencesUpTo(schedule: Schedule, today: string): string[] {
+function occurrencesUpTo(schedule: Schedule, today: string, stepDays: Record<string, number>): string[] {
   const { start_date, frequency, end_date } = schedule;
   const cap = end_date && end_date < today ? end_date : today;
   const dates: string[] = [];
@@ -68,7 +83,7 @@ function occurrencesUpTo(schedule: Schedule, today: string): string[] {
     return dates;
   }
 
-  const step = STEP_DAYS[frequency];
+  const step = stepDays[frequency];
   let cursor = start_date;
   while (cursor <= cap) {
     dates.push(cursor);
@@ -89,6 +104,8 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const frequencies = await getConfig(supabase, "recurring_frequencies", DEFAULT_FREQUENCIES);
+  const stepDays = stepDaysMapFrom(frequencies);
 
   const { data: schedules, error: schedulesError } = await supabase
     .from("trade_schedules")
@@ -128,7 +145,7 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    for (const trade_date of occurrencesUpTo(schedule, today)) {
+    for (const trade_date of occurrencesUpTo(schedule, today, stepDays)) {
       const quantity = schedule.dollar_amount / price;
       rows.push({
         account: schedule.account,

@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { usePriceTargets } from '../hooks/usePriceTargets'
 import { evaluatePosition } from '../lib/performanceEvaluator'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './PerformanceEvaluator.css'
+
+const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 }
+const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
+const DEFAULT_BUY_SELL_THRESHOLDS = { buyUpsidePct: 10, buyMinScore: 2, sellUpsidePct: -5, sellMaxScoreNearResistance: 1 }
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -22,6 +27,9 @@ function pctClass(value) {
 
 export default function PerformanceEvaluator({ holdings, title, onClose }) {
   const { targets } = usePriceTargets()
+  const rateLimit = useConfigValue('twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
+  const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
+  const buySellThresholds = useConfigValue('buy_sell_thresholds', DEFAULT_BUY_SELL_THRESHOLDS)
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState(null)
   const [errors, setErrors] = useState({})
@@ -49,20 +57,23 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
       const data = results?.[holding.ticker]
       if (!data) return null
       const targetPrice = targets[holding.ticker]?.target_price ?? null
-      const evaluation = evaluatePosition({
-        currentPrice: data.currentPrice,
-        targetPrice,
-        sma20: data.sma20,
-        sma50: data.sma50,
-        sma200: data.sma200,
-        support: data.support,
-        resistance: data.resistance,
-      })
+      const evaluation = evaluatePosition(
+        {
+          currentPrice: data.currentPrice,
+          targetPrice,
+          sma20: data.sma20,
+          sma50: data.sma50,
+          sma200: data.sma200,
+          support: data.support,
+          resistance: data.resistance,
+        },
+        { proximityPct: srTuning.proximityPct, ...buySellThresholds },
+      )
       return { ticker: holding.ticker, ...data, targetPrice, ...evaluation }
     })
     .filter(Boolean)
 
-  const estimatedMinutes = Math.ceil(holdings.length / 8) - 1
+  const estimatedMinutes = Math.ceil(holdings.length / rateLimit.maxPerWindow) - 1
 
   return (
     <div className="modal-overlay" onClick={onClose}>

@@ -6,8 +6,17 @@
 // instance, so without a shared gate here, simply loading a page with more
 // than 8 watchlist tickers fires that many uncoordinated fetches at once
 // and blows the cap immediately.
-const MAX_PER_WINDOW = 8
-const WINDOW_MS = 61_000
+let MAX_PER_WINDOW = 8
+let WINDOW_MS = 61_000
+
+// Called once from Layout.jsx (rendered for every route) after app_config
+// loads — this module is a plain singleton, not a component/hook, so it
+// can't read config itself. No-ops for any field left unset, so a
+// still-loading or missing config row just keeps the defaults above.
+export function configureTwelveDataQueue({ maxPerWindow, windowMs } = {}) {
+  if (maxPerWindow) MAX_PER_WINDOW = maxPerWindow
+  if (windowMs) WINDOW_MS = windowMs
+}
 
 let windowCount = 0
 let windowEndsAt = 0

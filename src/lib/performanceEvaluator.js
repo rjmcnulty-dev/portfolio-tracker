@@ -15,7 +15,17 @@
 //   - Upside <= -5% (price already past target) → Sell.
 //   - Trend score <= 1 (downtrend) and price near a resistance level → Sell.
 //   - Everything else → Hold.
-const PROXIMITY_PCT = 0.03
+//
+// The thresholds below (proximity, upside/score cutoffs) are the fallback
+// defaults; callers pass app_config's support_resistance_tuning.proximityPct
+// and buy_sell_thresholds as `tuning` once loaded — see PerformanceEvaluator.jsx.
+const DEFAULT_TUNING = {
+  proximityPct: 0.03,
+  buyUpsidePct: 10,
+  buyMinScore: 2,
+  sellUpsidePct: -5,
+  sellMaxScoreNearResistance: 1,
+}
 
 function trendScore(currentPrice, sma20, sma50, sma200) {
   let score = 0
@@ -37,20 +47,24 @@ function nearestLevel(levels) {
   return levels?.length ? levels[0] : null
 }
 
-function isNear(currentPrice, level) {
+function isNear(currentPrice, level, proximityPct) {
   if (!level) return false
-  return Math.abs(currentPrice - level.price) / currentPrice <= PROXIMITY_PCT
+  return Math.abs(currentPrice - level.price) / currentPrice <= proximityPct
 }
 
-export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma200, support, resistance }) {
+export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma200, support, resistance }, tuning = {}) {
+  const { proximityPct, buyUpsidePct, buyMinScore, sellUpsidePct, sellMaxScoreNearResistance } = {
+    ...DEFAULT_TUNING,
+    ...tuning,
+  }
   const hasAnySMA = sma20 != null || sma50 != null || sma200 != null
   const score = trendScore(currentPrice, sma20, sma50, sma200)
   const trend = trendLabel(score, hasAnySMA)
 
   const nearestSupport = nearestLevel(support)
   const nearestResistance = nearestLevel(resistance)
-  const nearSupport = isNear(currentPrice, nearestSupport)
-  const nearResistance = isNear(currentPrice, nearestResistance)
+  const nearSupport = isNear(currentPrice, nearestSupport, proximityPct)
+  const nearResistance = isNear(currentPrice, nearestResistance, proximityPct)
 
   const upsidePct = targetPrice ? ((targetPrice - currentPrice) / currentPrice) * 100 : null
 
@@ -59,13 +73,13 @@ export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma2
 
   if (upsidePct == null) {
     reasons.push('No price target set — suggestion is trend-only until you set one on the Prices page.')
-  } else if (upsidePct >= 10 && score >= 2) {
+  } else if (upsidePct >= buyUpsidePct && score >= buyMinScore) {
     suggestion = 'Buy'
     reasons.push(`${upsidePct.toFixed(1)}% upside to target`, `${trend.toLowerCase()} (above ${score}/3 moving averages)`)
-  } else if (upsidePct <= -5) {
+  } else if (upsidePct <= sellUpsidePct) {
     suggestion = 'Sell'
     reasons.push(`Price is ${Math.abs(upsidePct).toFixed(1)}% above target`)
-  } else if (score <= 1 && nearResistance) {
+  } else if (score <= sellMaxScoreNearResistance && nearResistance) {
     suggestion = 'Sell'
     reasons.push(`${trend.toLowerCase()}`, `near resistance (~$${nearestResistance.price.toFixed(2)})`)
   } else {

@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { useDailyGains } from '../hooks/useDailyGains'
 import { useAccountValueBounds } from '../hooks/useAccountValueBounds'
 import { useNetDepositsWithdrawals } from '../hooks/useNetDepositsWithdrawals'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './DailyGainsTable.css'
 
-const WEEK_SIZE = 5
+const DEFAULT_DAILY_GAINS_DEFAULTS = { defaultDayCount: 5, weekSize: 5 }
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -35,6 +36,7 @@ export default function DailyGainsTable({ account, holdings, trades }) {
   // either date input this becomes an explicit { start, end }.
   const [customRange, setCustomRange] = useState(null)
   const { allDates, displayDates, rows, dailyTotals, loading, error } = useDailyGains(holdings, trades, customRange)
+  const { weekSize: WEEK_SIZE } = useConfigValue('daily_gains_defaults', DEFAULT_DAILY_GAINS_DEFAULTS)
 
   const rangeStart = customRange?.start ?? displayDates[0] ?? ''
   const rangeEnd = customRange?.end ?? displayDates[displayDates.length - 1] ?? ''
@@ -79,7 +81,7 @@ export default function DailyGainsTable({ account, holdings, trades }) {
       })
     }
     return weeks
-  }, [allDates])
+  }, [allDates, WEEK_SIZE])
 
   const selectedWeekLabel = weekOptions.find((w) => w.start === rangeStart && w.end === rangeEnd)?.label ?? ''
 

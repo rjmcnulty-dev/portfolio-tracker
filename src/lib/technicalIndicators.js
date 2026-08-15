@@ -55,14 +55,16 @@ function clusterLevels(levels, tolerancePct) {
 // times at a local swing high/low, clustered by proximity — not just the
 // period's absolute min/max. This is a chart aid, not authoritative
 // technical analysis; a level with more "strength" (touches) is a stronger
-// candidate but there's no guarantee it holds going forward.
-export function findSupportResistance(series, maxLevels = 2) {
+// candidate but there's no guarantee it holds going forward. tolerancePct/
+// swingWindowPct/maxLevels default to app_config's support_resistance_tuning
+// values as of when this was wired up — callers pass the live config value.
+export function findSupportResistance(series, maxLevels = 2, tolerancePct = 0.015, swingWindowPct = 0.03) {
   if (series.length < 10) return { support: [], resistance: [] }
-  const window = Math.max(2, Math.round(series.length * 0.03))
+  const window = Math.max(2, Math.round(series.length * swingWindowPct))
   const { highs, lows } = findSwingPoints(series, window)
   return {
-    resistance: clusterLevels(highs, 0.015).slice(0, maxLevels),
-    support: clusterLevels(lows, 0.015).slice(0, maxLevels),
+    resistance: clusterLevels(highs, tolerancePct).slice(0, maxLevels),
+    support: clusterLevels(lows, tolerancePct).slice(0, maxLevels),
   }
 }
 

@@ -10,6 +10,7 @@
 // Usage:
 //   SUPABASE_URL=... SUPABASE_ANON_KEY=... TWELVE_DATA_API_KEY=... npm run portfolio:backfill
 import { createClient } from '@supabase/supabase-js'
+import { getConfig } from './lib/config.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -26,9 +27,9 @@ const BUY_TRADE_TYPES = ['BUY', 'Scheduled Buy']
 
 // Twelve Data's free tier caps at 8 API credits/minute; unlike the /price
 // endpoint, /time_series only accepts one symbol per call, so each ticker
-// costs its own credit regardless of how much history it returns.
-const MAX_SYMBOLS_PER_MINUTE = 8
-const RATE_LIMIT_WINDOW_MS = 61_000
+// costs its own credit regardless of how much history it returns. DB-backed
+// via app_config's twelve_data_rate_limit — this is the pre-config fallback.
+const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 }
 const OUTPUT_SIZE = 5000 // generous upper bound; costs the same 1 credit either way
 
 function sleep(ms) {
@@ -68,20 +69,20 @@ async function fetchDailyHistory(ticker) {
     .reverse() // Twelve Data returns newest-first.
 }
 
-async function fetchAllHistories(tickers) {
+async function fetchAllHistories(tickers, maxSymbolsPerMinute, rateLimitWindowMs) {
   const historyByTicker = new Map()
 
-  for (let i = 0; i < tickers.length; i += MAX_SYMBOLS_PER_MINUTE) {
-    const chunk = tickers.slice(i, i + MAX_SYMBOLS_PER_MINUTE)
+  for (let i = 0; i < tickers.length; i += maxSymbolsPerMinute) {
+    const chunk = tickers.slice(i, i + maxSymbolsPerMinute)
     for (const ticker of chunk) {
       console.log(`Fetching history for ${ticker}…`)
       historyByTicker.set(ticker, await fetchDailyHistory(ticker))
     }
 
-    const hasMoreChunks = i + MAX_SYMBOLS_PER_MINUTE < tickers.length
+    const hasMoreChunks = i + maxSymbolsPerMinute < tickers.length
     if (hasMoreChunks) {
       console.log('Waiting for the next per-minute credit window…')
-      await sleep(RATE_LIMIT_WINDOW_MS)
+      await sleep(rateLimitWindowMs)
     }
   }
 
@@ -156,7 +157,8 @@ async function main() {
 
   console.log(`Backfilling ${startDate} through ${endDate} for ${tickers.length} ticker(s): ${tickers.join(', ')}`)
 
-  const historyByTicker = await fetchAllHistories(tickers)
+  const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
+  const historyByTicker = await fetchAllHistories(tickers, rateLimit.maxPerWindow, rateLimit.windowMs)
   const priceCursors = new Map([...historyByTicker].map(([ticker, history]) => [ticker, makePriceCursor(history)]))
 
   // ticker_price_history rides along for free — this history was already

@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './DepositForm.css'
 
-const FREQUENCIES = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Biweekly' },
-  { value: 'monthly', label: 'Monthly' },
+const DEFAULT_FREQUENCIES = [
+  { value: 'daily', label: 'Daily', stepDays: 1 },
+  { value: 'weekly', label: 'Weekly', stepDays: 7 },
+  { value: 'biweekly', label: 'Biweekly', stepDays: 14 },
+  { value: 'monthly', label: 'Monthly', stepDays: null },
 ]
 
-const DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
+const DEFAULT_DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
 
 const EMPTY_SCHEDULE = {
   account: '',
@@ -20,7 +21,7 @@ const EMPTY_SCHEDULE = {
   start_date: new Date().toISOString().slice(0, 10),
   end_date: '',
   active: true,
-  deposit_type: DEPOSIT_TYPES[0],
+  deposit_type: DEFAULT_DEPOSIT_TYPES[0],
   notes: '',
 }
 
@@ -39,6 +40,8 @@ function toFormState(schedule) {
 
 export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
+  const FREQUENCIES = useConfigValue('recurring_frequencies', DEFAULT_FREQUENCIES)
+  const DEPOSIT_TYPES = useConfigValue('deposit_types', DEFAULT_DEPOSIT_TYPES)
   const [form, setForm] = useState(() => (schedule ? toFormState(schedule) : { ...EMPTY_SCHEDULE }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)

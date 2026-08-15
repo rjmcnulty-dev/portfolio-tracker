@@ -1,0 +1,70 @@
+.admin-config {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-config__category h3 {
+  font-size: 15px;
+  color: var(--navy-dark);
+  margin-bottom: 10px;
+}
+
+.admin-config__row {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.admin-config__row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.admin-config__row-label {
+  font-weight: 600;
+  color: var(--navy-dark);
+  font-size: 14px;
+}
+
+.admin-config__row-updated {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.admin-config__row-description {
+  margin: 4px 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.admin-config__row-textarea {
+  width: 100%;
+  min-height: 90px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12.5px;
+}
+
+.admin-config__row-error {
+  color: var(--red);
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.admin-config__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.admin-config__row-saved {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}

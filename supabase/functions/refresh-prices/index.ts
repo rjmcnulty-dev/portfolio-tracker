@@ -8,6 +8,7 @@
 // server-side job (auth verification of the caller is handled by the
 // platform gateway via `verify_jwt = false` + the public apikey header).
 import { createClient } from "@supabase/supabase-js";
+import { getConfig } from "../_shared/config.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -26,19 +27,24 @@ function json(body: unknown, status = 200) {
 // than 8 tickers has to be split across multiple per-minute windows. Fine for
 // a modest ticker count; if this ever grows past ~16-24 tickers, the wait
 // time will start pushing against Edge Function execution limits and this
-// should move to a queued/background approach instead.
-const MAX_SYMBOLS_PER_MINUTE = 8;
-const RATE_LIMIT_WINDOW_MS = 61_000;
+// should move to a queued/background approach instead. DB-backed via
+// app_config's twelve_data_rate_limit — this is the pre-config fallback.
+const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 };
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchQuotes(tickers: string[], apiKey: string): Promise<Record<string, { price?: string }>> {
+async function fetchQuotes(
+  tickers: string[],
+  apiKey: string,
+  maxSymbolsPerMinute: number,
+  rateLimitWindowMs: number,
+): Promise<Record<string, { price?: string }>> {
   const quotes: Record<string, { price?: string }> = {};
 
-  for (let i = 0; i < tickers.length; i += MAX_SYMBOLS_PER_MINUTE) {
-    const chunk = tickers.slice(i, i + MAX_SYMBOLS_PER_MINUTE);
+  for (let i = 0; i < tickers.length; i += maxSymbolsPerMinute) {
+    const chunk = tickers.slice(i, i + maxSymbolsPerMinute);
     const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(chunk.join(","))}&apikey=${apiKey}`;
     const res = await fetch(url);
     const body = await res.json();
@@ -51,9 +57,9 @@ async function fetchQuotes(tickers: string[], apiKey: string): Promise<Record<st
     // request returns { SYMBOL: { price: "..." }, ... }.
     Object.assign(quotes, chunk.length === 1 ? { [chunk[0]]: body } : body);
 
-    const hasMoreChunks = i + MAX_SYMBOLS_PER_MINUTE < tickers.length;
+    const hasMoreChunks = i + maxSymbolsPerMinute < tickers.length;
     if (hasMoreChunks) {
-      await sleep(RATE_LIMIT_WINDOW_MS);
+      await sleep(rateLimitWindowMs);
     }
   }
 
@@ -136,6 +142,7 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const rateLimit = await getConfig(supabase, "twelve_data_rate_limit", DEFAULT_RATE_LIMIT);
 
   // Optional { ticker: "AAPL" } body targets a single symbol — used by the
   // per-row "Auto Update" button — instead of refreshing every held ticker.
@@ -175,7 +182,7 @@ Deno.serve(async (req) => {
 
   let quotes: Record<string, { price?: string }>;
   try {
-    quotes = await fetchQuotes(tickers, twelveDataApiKey);
+    quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs);
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 502);
   }

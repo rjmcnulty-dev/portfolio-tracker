@@ -1108,9 +1108,80 @@ under the normal `Layout` so it keeps the sidebar like every other page.
 
 This protects **who can reach `/admin`'s controls** — it does not change what the anon key
 can already do to the database directly (every other table is still `using (true)`, unchanged
-by this feature). A later addition to this section (an `app_config` table for business
-settings, editable from `/admin`) will tighten writes on that one new table to
-`auth.role() = 'authenticated'`; no other table's policy changes.
+by this feature).
+
+### App settings (`app_config`)
+
+A curated set of business-logic constants — picked from a codebase audit for being either
+duplicated across multiple files (the Twelve Data rate limit was independently hardcoded in
+5 places) or just plausibly worth tuning without a deploy — live in one table instead, edited
+from `/admin`. Run once in the Supabase SQL editor:
+
+```sql
+create table if not exists app_config (
+  key text primary key,
+  value jsonb not null,
+  category text not null,
+  label text not null,
+  description text,
+  updated_at timestamptz not null default now()
+);
+alter table app_config enable row level security;
+create policy "Public read on app_config" on app_config for select using (true);
+create policy "Authenticated write on app_config" on app_config for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+insert into app_config (key, value, category, label, description) values
+  ('twelve_data_rate_limit', '{"maxPerWindow":8,"windowMs":61000}', 'API', 'Twelve Data Rate Limit',
+    'Free-tier credits per rolling window. Shared by the client queue, refresh-prices, fetch-prices.mjs, backfill-portfolio-history.mjs, and evaluate-performance.'),
+  ('deposit_types', '["Cash Deposit","Rollover","Short Term Capital Gain","Long Term Capital Gain","Dividend"]', 'Deposits', 'Deposit Types',
+    'Options offered on the Deposit Type dropdown (one-time and recurring forms).'),
+  ('recurring_frequencies', '[{"value":"daily","label":"Daily","stepDays":1},{"value":"weekly","label":"Weekly","stepDays":7},{"value":"biweekly","label":"Biweekly","stepDays":14},{"value":"monthly","label":"Monthly","stepDays":null}]', 'Recurring Schedules', 'Recurring Frequencies',
+    'Frequency options for recurring deposits/trades. stepDays drives the materialization day-math (monthly is calendar-month, not a fixed day count).'),
+  ('portfolio_value_ranges', '[{"key":"daily","label":"Daily","days":30},{"key":"monthly","label":"Monthly","days":365},{"key":"yearly","label":"Yearly","days":1825},{"key":"all","label":"All Time","days":null}]', 'Charts', 'Portfolio Value Chart Ranges',
+    'Lookback-window buttons on the Portfolio Value / [Account] Value cards.'),
+  ('moving_average_periods', '[20,50,200]', 'Stock Watch', 'Moving Average Periods',
+    'SMA periods drawn on Stock Watch charts and used by the Performance Evaluator''s trend score.'),
+  ('support_resistance_tuning', '{"tolerancePct":0.015,"swingWindowPct":0.03,"maxLevelsDefault":2,"proximityPct":0.03}', 'Stock Watch', 'Support/Resistance Tuning',
+    'Clustering tolerance and swing-point window for the support/resistance levels drawn on charts, plus how close counts as "near" a level in the Performance Evaluator.'),
+  ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1}', 'Performance Evaluator', 'Buy/Sell Thresholds',
+    'Trigger points for the Buy/Sell suggestion: upside % to target and trend score cutoffs.'),
+  ('daily_gains_defaults', '{"defaultDayCount":5,"weekSize":5}', 'Daily Gains', 'Daily Gains Defaults',
+    'Default number of trading days shown, and the size of a "week" chunk in the Week dropdown.'),
+  ('holdings_page_size_options', '{"options":[25,50,100,"All"],"default":25}', 'Trade Log', 'Page Size Options',
+    'Rows-per-page choices on the Trade Log table.'),
+  ('tax_filing_statuses', '[{"value":"single","label":"Single"},{"value":"married_joint","label":"Married Filing Jointly"}]', 'Tax', 'Filing Statuses',
+    'Options on the Tax Headroom filing-status dropdown.')
+on conflict (key) do nothing;
+```
+
+Read stays public (anon) since the client, Edge Functions, and scripts all need it without a
+login; writes require `authenticated` — the one deliberate RLS-tightening this project adds,
+scoped to this new table only (no changes to any of the 14 pre-existing tables' policies).
+
+Explicitly **left out** of this table (audited but not worth the churn): the Watchlist chart's
+`RANGES`/`LEVEL_COUNTS` and `watchlist-quote`'s paired `RANGE_PARAMS` (tightly-coupled
+display+fetch config — editing one without the other breaks the chart), chart pixel heights,
+color palettes, floating-point epsilons, and GitHub Actions cron schedules (not reachable
+from a DB table at all).
+
+**Client**: `src/hooks/useAppConfig.js` — `useAppConfig()` fetches every row once (called
+independently wherever needed, same pattern as `useAccounts`); `useConfigValue(key, fallback)`
+is a convenience for the common single-key case. Every call site keeps its pre-`app_config`
+value as that fallback, so a slow or failed fetch never breaks the page — it just behaves as
+if nothing had been customized yet.
+
+**Server-side**: only the keys actually duplicated server-side were worth wiring up —
+`twelve_data_rate_limit` (`supabase/functions/_shared/config.ts`, used by `refresh-prices` and
+`evaluate-performance`; `scripts/lib/config.mjs`, used by `fetch-prices.mjs` and
+`backfill-portfolio-history.mjs`) and `recurring_frequencies` (`_shared/config.ts`, used by
+`materialize-deposits` and `materialize-trades`). Both are plain reads with the same
+hardcoded-value fallback pattern as the client side — no encryption involved, this table isn't
+secret.
+
+`/admin`'s **App Settings** tab (`src/pages/AdminConfigPage.jsx`) groups these by `category`,
+with one form per row (a JSON-array editor for list-shaped values like `deposit_types`) and
+shows each row's `updated_at`.
 
 ## App structure
 

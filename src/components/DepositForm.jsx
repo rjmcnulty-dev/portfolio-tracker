@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './DepositForm.css'
 
-const DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
+const DEFAULT_DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend']
 
 const EMPTY_DEPOSIT = {
   account: '',
   transaction_type: 'Deposit',
   amount: '',
   deposit_date: new Date().toISOString().slice(0, 10),
-  deposit_type: DEPOSIT_TYPES[0],
+  deposit_type: DEFAULT_DEPOSIT_TYPES[0],
   notes: '',
 }
 
@@ -28,6 +29,7 @@ function toFormState(deposit) {
 
 export default function DepositForm({ deposit, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
+  const DEPOSIT_TYPES = useConfigValue('deposit_types', DEFAULT_DEPOSIT_TYPES)
   const [form, setForm] = useState(() => (deposit ? toFormState(deposit) : { ...EMPTY_DEPOSIT }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)

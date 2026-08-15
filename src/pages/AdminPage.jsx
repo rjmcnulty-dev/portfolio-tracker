@@ -1,4 +1,5 @@
 import { useAuth } from '../hooks/useAuth'
+import AdminConfigPage from './AdminConfigPage'
 
 export default function AdminPage() {
   const { user, signOut } = useAuth()
@@ -14,7 +15,15 @@ export default function AdminPage() {
           Sign out
         </button>
       </header>
-      <p className="page__hint">App settings and secrets management land here next.</p>
+      <section className="page__section">
+        <header className="page__header">
+          <h2>App Settings</h2>
+          <p className="page__subtitle">
+            Business-logic constants used across the app — edited here as raw JSON, effective immediately.
+          </p>
+        </header>
+        <AdminConfigPage />
+      </section>
     </div>
   )
 }

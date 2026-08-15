@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './HoldingsTable.css'
 
 // Kept in sync with every field in TradeForm's Add/Edit Trade modal (plus the
@@ -24,8 +25,7 @@ const COLUMNS = [
 
 const STORAGE_KEY = 'portfolio-tracker:holdings-table-columns'
 const DEFAULT_VISIBLE_KEYS = COLUMNS.map((c) => c.key)
-const PAGE_SIZE_OPTIONS = [25, 50, 100, 'All']
-const DEFAULT_PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE_CONFIG = { options: [25, 50, 100, 'All'], default: 25 }
 
 function loadVisibleKeys() {
   try {
@@ -75,7 +75,11 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
   const [deleteError, setDeleteError] = useState(null)
   const [visibleKeys, setVisibleKeys] = useState(loadVisibleKeys)
   const [showColumnPicker, setShowColumnPicker] = useState(false)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const { options: PAGE_SIZE_OPTIONS, default: defaultPageSize } = useConfigValue(
+    'holdings_page_size_options',
+    DEFAULT_PAGE_SIZE_CONFIG,
+  )
+  const [pageSize, setPageSize] = useState(defaultPageSize)
   const [page, setPage] = useState(1)
 
   useEffect(() => {

@@ -12,6 +12,9 @@
 //
 // TWELVE_DATA_API_KEY stays a Supabase secret so it never reaches
 // client-side JS.
+import { createClient } from "@supabase/supabase-js";
+import { getConfig } from "../_shared/config.ts";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -29,9 +32,11 @@ function sleep(ms: number) {
 }
 
 // Twelve Data's free tier caps at 8 API credits/minute — same budget the
-// other price-fetching jobs in this app ration against.
-const MAX_TICKERS_PER_MINUTE = 8;
-const RATE_LIMIT_WINDOW_MS = 61_000;
+// other price-fetching jobs in this app ration against. DB-backed via
+// app_config's twelve_data_rate_limit — this is the pre-config fallback.
+const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 };
+const DEFAULT_MA_PERIODS = [20, 50, 200];
+const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2 };
 
 interface SeriesPoint {
   date: string;
@@ -138,13 +143,18 @@ function clusterLevels(levels: number[], tolerancePct: number): Level[] {
     .sort((a, b) => b.strength - a.strength);
 }
 
-function findSupportResistance(series: SeriesPoint[], maxLevels = 2): { support: Level[]; resistance: Level[] } {
+function findSupportResistance(
+  series: SeriesPoint[],
+  maxLevels: number,
+  tolerancePct: number,
+  swingWindowPct: number,
+): { support: Level[]; resistance: Level[] } {
   if (series.length < 10) return { support: [], resistance: [] };
-  const window = Math.max(2, Math.round(series.length * 0.03));
+  const window = Math.max(2, Math.round(series.length * swingWindowPct));
   const { highs, lows } = findSwingPoints(series, window);
   return {
-    resistance: clusterLevels(highs, 0.015).slice(0, maxLevels),
-    support: clusterLevels(lows, 0.015).slice(0, maxLevels),
+    resistance: clusterLevels(highs, tolerancePct).slice(0, maxLevels),
+    support: clusterLevels(lows, tolerancePct).slice(0, maxLevels),
   };
 }
 
@@ -157,6 +167,16 @@ Deno.serve(async (req) => {
   if (!apiKey) {
     return json({ error: "TWELVE_DATA_API_KEY is not configured" }, 500);
   }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    return json({ error: "Supabase runtime env vars are missing" }, 500);
+  }
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const rateLimit = await getConfig(supabase, "twelve_data_rate_limit", DEFAULT_RATE_LIMIT);
+  const maPeriods = await getConfig(supabase, "moving_average_periods", DEFAULT_MA_PERIODS);
+  const srTuning = await getConfig(supabase, "support_resistance_tuning", DEFAULT_SR_TUNING);
 
   let tickers: string[] = [];
   try {
@@ -175,8 +195,8 @@ Deno.serve(async (req) => {
   const results: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
 
-  for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_MINUTE) {
-    const chunk = tickers.slice(i, i + MAX_TICKERS_PER_MINUTE);
+  for (let i = 0; i < tickers.length; i += rateLimit.maxPerWindow) {
+    const chunk = tickers.slice(i, i + rateLimit.maxPerWindow);
 
     await Promise.all(
       chunk.map(async (ticker) => {
@@ -188,14 +208,19 @@ Deno.serve(async (req) => {
             return;
           }
 
-          const { support, resistance } = findSupportResistance(series);
+          const { support, resistance } = findSupportResistance(
+            series,
+            srTuning.maxLevelsDefault,
+            srTuning.tolerancePct,
+            srTuning.swingWindowPct,
+          );
 
           results[ticker] = {
             currentPrice: series[series.length - 1].close,
             returns: computeReturns(series),
-            sma20: latestSMA(series, 20),
-            sma50: latestSMA(series, 50),
-            sma200: latestSMA(series, 200),
+            sma20: latestSMA(series, maPeriods[0]),
+            sma50: latestSMA(series, maPeriods[1]),
+            sma200: latestSMA(series, maPeriods[2]),
             support,
             resistance,
           };
@@ -205,9 +230,9 @@ Deno.serve(async (req) => {
       }),
     );
 
-    const hasMoreChunks = i + MAX_TICKERS_PER_MINUTE < tickers.length;
+    const hasMoreChunks = i + rateLimit.maxPerWindow < tickers.length;
     if (hasMoreChunks) {
-      await sleep(RATE_LIMIT_WINDOW_MS);
+      await sleep(rateLimit.windowMs);
     }
   }
 

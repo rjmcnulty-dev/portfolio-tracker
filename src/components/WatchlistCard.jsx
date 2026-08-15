@@ -12,8 +12,12 @@ import {
 } from 'recharts'
 import { useStockQuote } from '../hooks/useStockQuote'
 import { computeSMA, findSupportResistance, mergeIndicators } from '../lib/technicalIndicators'
+import { useConfigValue } from '../hooks/useAppConfig'
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
+
+const DEFAULT_MA_PERIODS = [20, 50, 200]
+const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
 
 // 20D/50D/200D fetch enough history (2x the period — see watchlist-quote's
 // RANGE_PARAMS) that the matching moving average (MA20/50/200) renders as a
@@ -145,7 +149,7 @@ function ChartTooltip({ active, payload, label, support, resistance, showLevels 
   )
 }
 
-function PriceChart({ chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, height }) {
+function PriceChart({ chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, maPeriods, height }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
@@ -182,13 +186,13 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
           ))}
         <Line type="monotone" dataKey="close" name="Close" stroke="var(--blue)" dot={false} strokeWidth={2} />
         {showSMA20 && (
-          <Line type="monotone" dataKey="sma20" name="MA 20" stroke="var(--gold)" dot={false} strokeWidth={1.5} connectNulls={false} />
+          <Line type="monotone" dataKey="sma20" name={`MA ${maPeriods[0]}`} stroke="var(--gold)" dot={false} strokeWidth={1.5} connectNulls={false} />
         )}
         {showSMA50 && (
           <Line
             type="monotone"
             dataKey="sma50"
-            name="MA 50"
+            name={`MA ${maPeriods[1]}`}
             stroke="var(--light-blue)"
             dot={false}
             strokeWidth={1.5}
@@ -199,7 +203,7 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
           <Line
             type="monotone"
             dataKey="sma200"
-            name="MA 200"
+            name={`MA ${maPeriods[2]}`}
             stroke="var(--purple)"
             dot={false}
             strokeWidth={1.5}
@@ -212,12 +216,14 @@ function PriceChart({ chartData, range, showLevels, support, resistance, showSMA
 }
 
 export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings }) {
+  const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
+  const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
   const [showSMA200, setShowSMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
-  const [levelCount, setLevelCount] = useState(2)
+  const [levelCount, setLevelCount] = useState(srTuning.maxLevelsDefault)
   const [expanded, setExpanded] = useState(false)
 
   // Cards otherwise manage these settings independently (so you can e.g.
@@ -251,10 +257,13 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   const change = latestPrice != null && firstPrice != null ? latestPrice - firstPrice : null
   const changePct = change != null && firstPrice ? (change / firstPrice) * 100 : null
 
-  const sma20 = useMemo(() => computeSMA(series, 20), [series])
-  const sma50 = useMemo(() => computeSMA(series, 50), [series])
-  const sma200 = useMemo(() => computeSMA(series, 200), [series])
-  const { support, resistance } = useMemo(() => findSupportResistance(series, levelCount), [series, levelCount])
+  const sma20 = useMemo(() => computeSMA(series, maPeriods[0]), [series, maPeriods])
+  const sma50 = useMemo(() => computeSMA(series, maPeriods[1]), [series, maPeriods])
+  const sma200 = useMemo(() => computeSMA(series, maPeriods[2]), [series, maPeriods])
+  const { support, resistance } = useMemo(
+    () => findSupportResistance(series, levelCount, srTuning.tolerancePct, srTuning.swingWindowPct),
+    [series, levelCount, srTuning],
+  )
 
   const chartData = useMemo(
     () =>
@@ -267,9 +276,9 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   )
 
   const indicatorToggles = [
-    { key: 'sma20', label: 'MA 20', show: showSMA20, setShow: setShowSMA20, disabled: sma20.length === 0 },
-    { key: 'sma50', label: 'MA 50', show: showSMA50, setShow: setShowSMA50, disabled: sma50.length === 0 },
-    { key: 'sma200', label: 'MA 200', show: showSMA200, setShow: setShowSMA200, disabled: sma200.length === 0 },
+    { key: 'sma20', label: `MA ${maPeriods[0]}`, show: showSMA20, setShow: setShowSMA20, disabled: sma20.length === 0 },
+    { key: 'sma50', label: `MA ${maPeriods[1]}`, show: showSMA50, setShow: setShowSMA50, disabled: sma50.length === 0 },
+    { key: 'sma200', label: `MA ${maPeriods[2]}`, show: showSMA200, setShow: setShowSMA200, disabled: sma200.length === 0 },
     {
       key: 'levels',
       label: 'Support / Resistance',
@@ -292,7 +301,7 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
     }
   }
 
-  const chartProps = { chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200 }
+  const chartProps = { chartData, range, showLevels, support, resistance, showSMA20, showSMA50, showSMA200, maPeriods }
 
   return (
     <div className="watchlist-card">

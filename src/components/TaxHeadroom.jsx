@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './TaxHeadroom.css'
 
 const CURRENT_YEAR = new Date().getFullYear()
+const DEFAULT_FILING_STATUSES = [
+  { value: 'single', label: 'Single' },
+  { value: 'married_joint', label: 'Married Filing Jointly' },
+]
 
 const EMPTY_SETTINGS = {
   year: CURRENT_YEAR,
@@ -13,6 +18,7 @@ const EMPTY_SETTINGS = {
 }
 
 export default function TaxHeadroom() {
+  const filingStatuses = useConfigValue('tax_filing_statuses', DEFAULT_FILING_STATUSES)
   const [settings, setSettings] = useState(EMPTY_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -78,8 +84,11 @@ export default function TaxHeadroom() {
             value={settings.filing_status}
             onChange={(e) => setSettings((prev) => ({ ...prev, filing_status: e.target.value }))}
           >
-            <option value="single">Single</option>
-            <option value="married_joint">Married Filing Jointly</option>
+            {filingStatuses.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
           </select>
         </label>
         <label>

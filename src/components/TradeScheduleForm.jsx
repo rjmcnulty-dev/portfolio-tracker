@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './TradeForm.css'
 
-const FREQUENCIES = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Biweekly' },
-  { value: 'monthly', label: 'Monthly' },
+const DEFAULT_FREQUENCIES = [
+  { value: 'daily', label: 'Daily', stepDays: 1 },
+  { value: 'weekly', label: 'Weekly', stepDays: 7 },
+  { value: 'biweekly', label: 'Biweekly', stepDays: 14 },
+  { value: 'monthly', label: 'Monthly', stepDays: null },
 ]
 
 const EMPTY_SCHEDULE = {
@@ -23,6 +24,7 @@ const EMPTY_SCHEDULE = {
 
 export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
+  const FREQUENCIES = useConfigValue('recurring_frequencies', DEFAULT_FREQUENCIES)
   const [form, setForm] = useState(() =>
     schedule ? { ...schedule, end_date: schedule.end_date ?? '' } : { ...EMPTY_SCHEDULE },
   )

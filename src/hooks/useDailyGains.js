@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { isBuyTrade } from '../lib/tradeTypes'
+import { useConfigValue } from './useAppConfig'
 
-const DEFAULT_DAY_COUNT = 5
+const DEFAULT_DAILY_GAINS_DEFAULTS = { defaultDayCount: 5, weekSize: 5 }
 
 // Day-by-day $ / % change per ticker, as a matrix: one row per ticker, one
 // column per trading day. `range` is either null (default: the 5 most
@@ -23,6 +24,7 @@ const DEFAULT_DAY_COUNT = 5
 // across the held tickers (not a fixed calendar walk), so weekends/
 // holidays/gaps don't produce empty columns.
 export function useDailyGains(holdings, trades, range) {
+  const { defaultDayCount } = useConfigValue('daily_gains_defaults', DEFAULT_DAILY_GAINS_DEFAULTS)
   const [historyByTicker, setHistoryByTicker] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -135,8 +137,8 @@ export function useDailyGains(holdings, trades, range) {
     if (range?.start && range?.end) {
       return allDates.filter((date) => date >= range.start && date <= range.end)
     }
-    return allDates.slice(-DEFAULT_DAY_COUNT)
-  }, [allDates, range])
+    return allDates.slice(-defaultDayCount)
+  }, [allDates, range, defaultDayCount])
 
   const rows = useMemo(() => {
     return holdings.map((holding) => {

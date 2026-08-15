@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { getConfig } from './lib/config.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -13,19 +14,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // Twelve Data's free tier caps at 8 API credits/minute, and each symbol costs
 // 1 credit even inside a single batched request — so a portfolio with more
-// than 8 tickers has to be split across multiple per-minute windows.
-const MAX_SYMBOLS_PER_MINUTE = 8
-const RATE_LIMIT_WINDOW_MS = 61_000
+// than 8 tickers has to be split across multiple per-minute windows. DB-backed
+// via app_config's twelve_data_rate_limit — this is the pre-config fallback.
+const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function fetchQuotes(tickers) {
+async function fetchQuotes(tickers, maxSymbolsPerMinute, rateLimitWindowMs) {
   const quotes = {}
 
-  for (let i = 0; i < tickers.length; i += MAX_SYMBOLS_PER_MINUTE) {
-    const chunk = tickers.slice(i, i + MAX_SYMBOLS_PER_MINUTE)
+  for (let i = 0; i < tickers.length; i += maxSymbolsPerMinute) {
+    const chunk = tickers.slice(i, i + maxSymbolsPerMinute)
     const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(chunk.join(','))}&apikey=${TWELVE_DATA_API_KEY}`
     const res = await fetch(url)
     const body = await res.json()
@@ -38,10 +39,10 @@ async function fetchQuotes(tickers) {
     // request returns { SYMBOL: { price: "..." }, ... }.
     Object.assign(quotes, chunk.length === 1 ? { [chunk[0]]: body } : body)
 
-    const hasMoreChunks = i + MAX_SYMBOLS_PER_MINUTE < tickers.length
+    const hasMoreChunks = i + maxSymbolsPerMinute < tickers.length
     if (hasMoreChunks) {
       console.log(`Fetched ${chunk.length} ticker(s), waiting for the next per-minute credit window…`)
-      await sleep(RATE_LIMIT_WINDOW_MS)
+      await sleep(rateLimitWindowMs)
     }
   }
 
@@ -108,7 +109,8 @@ async function main() {
     return
   }
 
-  const quotes = await fetchQuotes(tickers)
+  const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
+  const quotes = await fetchQuotes(tickers, rateLimit.maxPerWindow, rateLimit.windowMs)
 
   const asOf = new Date().toISOString().slice(0, 10)
   const now = new Date().toISOString()

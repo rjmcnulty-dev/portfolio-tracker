@@ -3,12 +3,14 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { usePortfolioValueHistory } from '../hooks/usePortfolioValueHistory'
 import { useDeposits } from '../hooks/useDeposits'
 import { useNetDepositsWithdrawals } from '../hooks/useNetDepositsWithdrawals'
+import { useConfigValue } from '../hooks/useAppConfig'
 import './PortfolioValueChart.css'
 
 // "Daily"/"Monthly"/"Yearly" are lookback windows over the (always
 // daily-granularity) history, not aggregation buckets — matches how Stock
-// Watch's range buttons work. "All Time" has no lower bound.
-const RANGES = [
+// Watch's range buttons work. "All Time" has no lower bound. DB-backed via
+// app_config's portfolio_value_ranges — this is the pre-config fallback.
+const DEFAULT_RANGES = [
   { key: 'daily', label: 'Daily', days: 30 },
   { key: 'monthly', label: 'Monthly', days: 365 },
   { key: 'yearly', label: 'Yearly', days: 1825 },
@@ -86,6 +88,7 @@ function ValueTooltip({ active, payload, label, title }) {
 export default function PortfolioValueChart({ account = 'All', title = 'Portfolio Value' }) {
   const { history, loading, error } = usePortfolioValueHistory(account)
   const { deposits } = useDeposits(account)
+  const RANGES = useConfigValue('portfolio_value_ranges', DEFAULT_RANGES)
   const [rangeKey, setRangeKey] = useState('monthly')
 
   const range = RANGES.find((r) => r.key === rangeKey)

@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAccounts } from '../hooks/useAccounts'
+import { useConfigValue } from '../hooks/useAppConfig'
 import { slugify } from '../lib/accounts'
+import { configureTwelveDataQueue } from '../lib/twelveDataQueue'
 import ManageAccountsForm from './ManageAccountsForm'
 
 function linkClass({ isActive }) {
@@ -11,6 +13,14 @@ function linkClass({ isActive }) {
 export default function Layout() {
   const { accounts, addAccount, deleteAccount, moveAccount, error: accountsError } = useAccounts()
   const [showManageAccounts, setShowManageAccounts] = useState(false)
+
+  // Rendered for every route, so this is the one place that can apply
+  // app_config's rate limit to the module-level twelveDataQueue singleton —
+  // see configureTwelveDataQueue for why it can't just read config itself.
+  const rateLimit = useConfigValue('twelve_data_rate_limit', null)
+  useEffect(() => {
+    if (rateLimit) configureTwelveDataQueue({ maxPerWindow: rateLimit.maxPerWindow, windowMs: rateLimit.windowMs })
+  }, [rateLimit])
 
   return (
     <div className="app-shell">
