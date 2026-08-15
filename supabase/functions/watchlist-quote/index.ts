@@ -15,6 +15,12 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// 20D/50D/200D fetch 2x their named period (not just N days) so the
+// matching moving average — MA20/50/200, computed client-side in
+// WatchlistCard from this series — has enough leading history to render as
+// a full line spanning the whole named period, rather than a single
+// trailing point (computeSMA needs `period` days of history before its
+// first point, so exactly `period` days of output would show none at all).
 const RANGE_PARAMS: Record<string, { interval: string; outputsize: number }> = {
   "1D": { interval: "5min", outputsize: 80 },
   "1W": { interval: "30min", outputsize: 70 },
@@ -22,6 +28,9 @@ const RANGE_PARAMS: Record<string, { interval: string; outputsize: number }> = {
   "3M": { interval: "1day", outputsize: 90 },
   "6M": { interval: "1day", outputsize: 180 },
   "1Y": { interval: "1day", outputsize: 365 },
+  "20D": { interval: "1day", outputsize: 40 },
+  "50D": { interval: "1day", outputsize: 100 },
+  "200D": { interval: "1day", outputsize: 400 },
 };
 
 interface TimeSeriesPoint {

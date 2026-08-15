@@ -15,7 +15,13 @@ import { computeSMA, findSupportResistance, mergeIndicators } from '../lib/techn
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
-export const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y']
+// 20D/50D/200D fetch enough history (2x the period — see watchlist-quote's
+// RANGE_PARAMS) that the matching moving average (MA20/50/200) renders as a
+// full line spanning the period it's named for, not just a single trailing
+// point — "aligned" to that timeframe rather than cut off by too little
+// data. Twelve Data returns daily bars for these same as 1M/3M/6M/1Y, so no
+// special-casing is needed elsewhere (X-axis formatting, etc.).
+export const RANGES = ['1D', '1W', '1M', '3M', '6M', '1Y', '20D', '50D', '200D']
 export const LEVEL_COUNTS = [1, 2, 3, 4]
 
 function formatCurrency(value) {
