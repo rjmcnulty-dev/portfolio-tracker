@@ -70,7 +70,7 @@ function AccountPageContent({ accountLabel }) {
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
           <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} />
-          <DailyGainsTable holdings={holdings} trades={trades} />
+          <DailyGainsTable account={accountLabel} holdings={holdings} trades={trades} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

@@ -72,7 +72,7 @@ export default function DepositsPage() {
     setSyncMessage(null)
     try {
       const result = await materializeNow()
-      setSyncMessage(result?.message ?? 'Recurring deposits synced.')
+      setSyncMessage(result?.message ?? 'Recurring transactions synced.')
       await refetchDeposits()
     } catch (err) {
       setSyncError(err.message)
@@ -85,9 +85,9 @@ export default function DepositsPage() {
     <div className="page">
       <header className="page__header page__header--row">
         <div>
-          <h1>Deposits</h1>
+          <h1>Deposits and Withdrawals</h1>
           <p className="page__subtitle">
-            Cash deposits across accounts, including auto-generated recurring contributions.
+            Cash deposits and withdrawals across accounts, including auto-generated recurring transactions.
           </p>
         </div>
         <div className="filters">
@@ -107,7 +107,7 @@ export default function DepositsPage() {
 
       <div className="kpi-row">
         <div className="kpi-card">
-          <span className="kpi-card__label">Total Deposited</span>
+          <span className="kpi-card__label">Net Deposits/Withdrawals</span>
           <span className="kpi-card__value">{formatCurrency(totalDeposited)}</span>
         </div>
         <div className="kpi-card">
@@ -124,7 +124,7 @@ export default function DepositsPage() {
               {syncing ? 'Syncing…' : 'Sync Now'}
             </button>
             <button className="btn btn--primary" onClick={openAddSchedule}>
-              + Add Recurring Deposit
+              + Add Recurring Transaction
             </button>
           </div>
         </header>
@@ -146,9 +146,9 @@ export default function DepositsPage() {
 
       <section className="page__section">
         <header className="page__header page__header--row">
-          <h2>Deposit History</h2>
+          <h2>Transaction History</h2>
           <button className="btn btn--primary" onClick={openAddDeposit}>
-            + Add One-Time Deposit
+            + Add Transaction
           </button>
         </header>
         {depositsError && <p className="page__error">Error: {depositsError}</p>}

@@ -47,7 +47,7 @@ export default function Layout() {
             Holdings - Prices
           </NavLink>
           <NavLink to="/deposits" className={linkClass}>
-            Deposits
+            Deposits and Withdrawals
           </NavLink>
           <NavLink to="/watch" className={linkClass}>
             Stock Watch

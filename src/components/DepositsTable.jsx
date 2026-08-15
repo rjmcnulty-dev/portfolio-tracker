@@ -5,7 +5,8 @@ import './DepositsTable.css'
 const COLUMNS = [
   { key: 'deposit_date', label: 'Date' },
   { key: 'account', label: 'Account', accountOnly: true },
-  { key: 'amount', label: 'Amount', numeric: true, currency: true },
+  { key: 'transaction_type', label: 'Deposit/Withdrawal' },
+  { key: 'amount', label: 'Amount', numeric: true, currency: true, pnl: true },
   { key: 'deposit_type', label: 'Type' },
   { key: 'source', label: 'Source' },
   { key: 'notes', label: 'Notes' },
@@ -21,6 +22,13 @@ function sourceValue(deposit) {
   return deposit.schedule_id ? 'Recurring' : 'Manual'
 }
 
+// A withdrawal is a deposits row with a negative amount (see
+// DepositForm.jsx) rather than a separate table/column — derived here for
+// display instead of stored, so it can never drift from the amount's sign.
+function transactionTypeValue(deposit) {
+  return Number(deposit.amount) < 0 ? 'Withdrawal' : 'Deposit'
+}
+
 export default function DepositsTable({ deposits, showAccount = true, onEdit, onDelete }) {
   const [sortKey, setSortKey] = useState('deposit_date')
   const [sortDir, setSortDir] = useState('desc')
@@ -31,8 +39,8 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
   const sorted = useMemo(() => {
     const rows = [...deposits]
     rows.sort((a, b) => {
-      const aVal = sortKey === 'source' ? sourceValue(a) : a[sortKey]
-      const bVal = sortKey === 'source' ? sourceValue(b) : b[sortKey]
+      const aVal = sortKey === 'source' ? sourceValue(a) : sortKey === 'transaction_type' ? transactionTypeValue(a) : a[sortKey]
+      const bVal = sortKey === 'source' ? sourceValue(b) : sortKey === 'transaction_type' ? transactionTypeValue(b) : b[sortKey]
       if (aVal == null) return 1
       if (bVal == null) return -1
       if (typeof aVal === 'number' || typeof bVal === 'number') {
@@ -55,7 +63,7 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
   }
 
   if (!deposits.length) {
-    return <div className="deposits-table__empty">No deposits recorded yet.</div>
+    return <div className="deposits-table__empty">No deposits or withdrawals recorded yet.</div>
   }
 
   return (
@@ -93,10 +101,19 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
                     </td>
                   )
                 }
+                if (col.key === 'transaction_type') {
+                  const isWithdrawal = transactionTypeValue(deposit) === 'Withdrawal'
+                  return (
+                    <td key={col.key} className={isWithdrawal ? 'is-negative' : 'is-positive'}>
+                      {isWithdrawal ? 'Withdrawal' : 'Deposit'}
+                    </td>
+                  )
+                }
                 const raw = deposit[col.key]
                 const display = col.currency ? formatCurrency(raw) : raw ?? '—'
+                const cellClass = col.pnl ? (Number(raw) > 0 ? 'is-positive' : Number(raw) < 0 ? 'is-negative' : '') : ''
                 return (
-                  <td key={col.key} className={col.numeric ? 'is-numeric' : ''}>
+                  <td key={col.key} className={`${col.numeric ? 'is-numeric' : ''} ${cellClass}`}>
                     {display}
                   </td>
                 )
@@ -121,8 +138,8 @@ export default function DepositsTable({ deposits, showAccount = true, onEdit, on
       </table>
       {confirmingDeposit && (
         <ConfirmDialog
-          title="Delete deposit?"
-          message={`Delete the ${formatCurrency(confirmingDeposit.amount)} deposit from ${confirmingDeposit.deposit_date}? This can't be undone.`}
+          title="Delete transaction?"
+          message={`Delete the ${formatCurrency(Math.abs(confirmingDeposit.amount))} ${transactionTypeValue(confirmingDeposit).toLowerCase()} from ${confirmingDeposit.deposit_date}? This can't be undone.`}
           onCancel={() => setConfirmingDeposit(null)}
           onConfirm={() => {
             onDelete(confirmingDeposit.id)

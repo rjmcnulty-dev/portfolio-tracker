@@ -14,6 +14,7 @@ const DEPOSIT_TYPES = ['Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'L
 
 const EMPTY_SCHEDULE = {
   account: '',
+  transaction_type: 'Deposit',
   amount: '',
   frequency: 'monthly',
   start_date: new Date().toISOString().slice(0, 10),
@@ -23,11 +24,22 @@ const EMPTY_SCHEDULE = {
   notes: '',
 }
 
+// Same negative-amount convention as DepositForm.jsx — a recurring
+// withdrawal (e.g. a monthly RMD) is just a schedule whose materialized
+// occurrences carry a negative amount.
+function toFormState(schedule) {
+  const amount = Number(schedule.amount) || 0
+  return {
+    ...schedule,
+    end_date: schedule.end_date ?? '',
+    transaction_type: amount < 0 ? 'Withdrawal' : 'Deposit',
+    amount: Math.abs(amount),
+  }
+}
+
 export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
-  const [form, setForm] = useState(() =>
-    schedule ? { ...schedule, end_date: schedule.end_date ?? '' } : { ...EMPTY_SCHEDULE },
-  )
+  const [form, setForm] = useState(() => (schedule ? toFormState(schedule) : { ...EMPTY_SCHEDULE }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -45,9 +57,11 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
     setSaving(true)
     setError(null)
 
+    const signedAmount = form.transaction_type === 'Withdrawal' ? -Math.abs(Number(form.amount)) : Math.abs(Number(form.amount))
+
     const payload = {
       account: form.account,
-      amount: Number(form.amount),
+      amount: signedAmount,
       frequency: form.frequency,
       start_date: form.start_date,
       end_date: form.end_date || null,
@@ -74,7 +88,7 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(event) => event.stopPropagation()}>
-        <h2 className="modal__title">{schedule?.id ? 'Edit Recurring Deposit' : 'Add Recurring Deposit'}</h2>
+        <h2 className="modal__title">{schedule?.id ? 'Edit Recurring Transaction' : 'Add Recurring Transaction'}</h2>
         <form className="deposit-form" onSubmit={handleSubmit}>
           <div className="deposit-form__grid">
             <label>
@@ -89,10 +103,18 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
               {accountsError && <span className="deposit-form__error">Accounts failed to load: {accountsError}</span>}
             </label>
             <label>
+              Transaction Type
+              <select value={form.transaction_type} onChange={(e) => handleChange('transaction_type', e.target.value)}>
+                <option value="Deposit">Deposit</option>
+                <option value="Withdrawal">Withdrawal</option>
+              </select>
+            </label>
+            <label>
               Amount
               <input
                 type="number"
                 step="any"
+                min="0"
                 required
                 value={form.amount}
                 onChange={(e) => handleChange('amount', e.target.value)}
@@ -121,16 +143,18 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
               End Date (optional)
               <input type="date" value={form.end_date} onChange={(e) => handleChange('end_date', e.target.value)} />
             </label>
-            <label>
-              Deposit Type
-              <select value={form.deposit_type} onChange={(e) => handleChange('deposit_type', e.target.value)}>
-                {DEPOSIT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {form.transaction_type !== 'Withdrawal' && (
+              <label>
+                Deposit Type
+                <select value={form.deposit_type} onChange={(e) => handleChange('deposit_type', e.target.value)}>
+                  {DEPOSIT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Active
               <select
@@ -154,7 +178,7 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
               Cancel
             </button>
             <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? 'Saving…' : 'Save Schedule'}
+              {saving ? 'Saving…' : 'Save Recurring Transaction'}
             </button>
           </div>
         </form>

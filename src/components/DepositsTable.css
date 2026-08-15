@@ -40,6 +40,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.deposits-table td.is-positive {
+  color: var(--green);
+}
+
+.deposits-table td.is-negative {
+  color: var(--red);
+}
+
 .deposits-table tbody tr:hover {
   background: #f8f9fb;
 }
@@ -109,6 +117,14 @@
 .deposits-table__detail-table td.is-numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.deposits-table__detail-table td.is-positive {
+  color: var(--green);
+}
+
+.deposits-table__detail-table td.is-negative {
+  color: var(--red);
 }
 
 .deposits-table__detail-summary {

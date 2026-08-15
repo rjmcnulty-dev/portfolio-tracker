@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useDailyGains } from '../hooks/useDailyGains'
+import { useAccountValueBounds } from '../hooks/useAccountValueBounds'
+import { useNetDepositsWithdrawals } from '../hooks/useNetDepositsWithdrawals'
 import './DailyGainsTable.css'
 
 const WEEK_SIZE = 5
@@ -28,7 +30,7 @@ function formatDateHeader(dateStr) {
   })
 }
 
-export default function DailyGainsTable({ holdings, trades }) {
+export default function DailyGainsTable({ account, holdings, trades }) {
   // null = default (5 most recent trading days); once the user touches
   // either date input this becomes an explicit { start, end }.
   const [customRange, setCustomRange] = useState(null)
@@ -36,6 +38,21 @@ export default function DailyGainsTable({ holdings, trades }) {
 
   const rangeStart = customRange?.start ?? displayDates[0] ?? ''
   const rangeEnd = customRange?.end ?? displayDates[displayDates.length - 1] ?? ''
+
+  const { startValue, endValue } = useAccountValueBounds(account, rangeStart, rangeEnd)
+  const valueChange = startValue != null && endValue != null ? endValue - startValue : null
+  const valueChangePct = valueChange != null && startValue ? (valueChange / startValue) * 100 : null
+
+  const { totalDeposits, totalWithdrawals, netAmount } = useNetDepositsWithdrawals(account, rangeStart, rangeEnd)
+
+  // The account's total value change minus new capital in/out — i.e. what
+  // Starting/Ending Account Value's Change would be if deposits/withdrawals
+  // hadn't happened. Should track the Daily Gains table's own Total column
+  // (grandTotalDollar below); the two aren't computed from the same data
+  // (this one's account-value snapshots, that one's per-ticker price replay),
+  // so treat close-but-not-exact as expected, not a bug.
+  const netGainLoss = valueChange != null ? valueChange - netAmount : null
+  const netGainLossPct = netGainLoss != null && startValue ? (netGainLoss / startValue) * 100 : null
 
   function handleStartChange(value) {
     setCustomRange({ start: value, end: rangeEnd })
@@ -75,8 +92,51 @@ export default function DailyGainsTable({ holdings, trades }) {
 
   return (
     <div className="chart-card daily-gains">
+      <h3 className="chart-card__title">Daily Gains and Losses</h3>
+
+      <div className="daily-gains__value-summary">
+        <div className="daily-gains__value-item">
+          <span className="daily-gains__value-label">Deposits</span>
+          <span className="daily-gains__value-amount is-positive">{formatCurrency(totalDeposits)}</span>
+        </div>
+        <div className="daily-gains__value-item">
+          <span className="daily-gains__value-label">Withdrawals</span>
+          <span className="daily-gains__value-amount is-negative">{formatCurrency(totalWithdrawals)}</span>
+        </div>
+        <div className="daily-gains__value-item">
+          <span className="daily-gains__value-label">Net Deposits/Withdrawals</span>
+          <span className={`daily-gains__value-amount ${pctClass(netAmount)}`}>{formatCurrency(netAmount)}</span>
+        </div>
+      </div>
+
+      <div className="daily-gains__value-summary">
+        <div className="daily-gains__value-item">
+          <span className="daily-gains__value-label">Starting Account Value</span>
+          <span className="daily-gains__value-amount">{formatCurrency(startValue)}</span>
+        </div>
+        <div className="daily-gains__value-item">
+          <span className="daily-gains__value-label">Ending Account Value</span>
+          <span className="daily-gains__value-amount">{formatCurrency(endValue)}</span>
+        </div>
+        {valueChange != null && (
+          <div className="daily-gains__value-item">
+            <span className="daily-gains__value-label">Change</span>
+            <span className={`daily-gains__value-amount ${pctClass(valueChange)}`}>
+              {formatCurrency(valueChange)} ({formatPct(valueChangePct)})
+            </span>
+          </div>
+        )}
+        {netGainLoss != null && (
+          <div className="daily-gains__value-item">
+            <span className="daily-gains__value-label">Net Gain/Loss</span>
+            <span className={`daily-gains__value-amount ${pctClass(netGainLoss)}`}>
+              {formatCurrency(netGainLoss)} ({formatPct(netGainLossPct)})
+            </span>
+          </div>
+        )}
+      </div>
+
       <div className="daily-gains__header">
-        <h3 className="chart-card__title">Daily Gains and Losses</h3>
         <div className="daily-gains__range-picker">
           <label>
             Week
@@ -166,7 +226,9 @@ export default function DailyGainsTable({ holdings, trades }) {
       )}
       <p className="daily-gains__hint">
         Hover a value for its % change. Cells show price-driven movement only — deposits and trades made that day
-        aren't included, since that's new capital, not a gain.
+        aren't included, since that's new capital, not a gain. Net Gain/Loss above is Change with deposits and
+        withdrawals backed out, so it should track this table's Total — small differences are expected, since Net
+        Gain/Loss comes from daily account-value snapshots and the Total comes from a per-ticker price replay.
       </p>
     </div>
   )

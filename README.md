@@ -678,6 +678,35 @@ visible day. This is *only* price movement: a deposit or a trade executed that d
 show up here as a gain — the same distinction `portfolio_value_history`'s `total_value`
 deliberately blurs (it includes cash) that this table deliberately doesn't.
 
+**Deposits/Withdrawals**, at the very top of the card, sums the `deposits` rows (see
+"Recurring deposits" below) whose `deposit_date` falls within the selected range for this
+account — Deposits (positive `amount` rows), Withdrawals (negative rows, shown as a positive
+magnitude), and their Net. This is the quantified version of the "a deposit explains the gap,
+not a bug" caveat below: it's computed by `useNetDepositsWithdrawals`, a plain sum over the
+same `deposits` table everything else reads, filtered to the account and date range — no new
+table or backend change was needed for it.
+
+**Starting/Ending Account Value**, just below that, is the opposite of the daily cells'
+deliberate distinction — it's the account's actual total value (cash + holdings) from
+`account_value_history`, the same source `PortfolioValueChart` uses. "Starting" is the
+latest snapshot strictly before the selected range begins (the account's value going into
+the period); "Ending" is the latest snapshot on or before the range's last day. Because this
+*does* include cash, Ending − Starting won't generally match the sum of the price-only
+daily cells below it — the Net Deposits/Withdrawals figure above accounts for that gap
+(a trade alone doesn't, since it just moves the same dollar amount from cash into holdings
+or back, at that day's price — no net effect on `total_value`). Either value can show
+"Not available" if that day was skipped during backfill (e.g. a held ticker had no price
+data yet).
+
+**Net Gain/Loss**, next to Change, is `Change − Net Deposits/Withdrawals` — the account
+value's actual investment performance over the range, with new capital in/out backed out.
+It's computed client-side in `DailyGainsTable`, not a separate hook or query. It should track
+the table's own **Total** figure below, since both are meant to represent the same
+price-driven change; they generally won't match exactly, because they're derived from two
+different data sources — Net Gain/Loss from daily `account_value_history` snapshots, Total
+from a per-ticker replay of `ticker_price_history` against `trades` — so treat a small
+difference as expected, not a bug.
+
 Defaults to the 5 most recent trading days with data; the From/To date inputs switch to an
 explicit range, and "Last 5 Days" resets back. The **Week** dropdown is a shortcut to the
 same thing — "Last Week," "2 weeks ago," etc. — partitioning the available trading days into
@@ -790,14 +819,25 @@ the UI either way, just wait a few seconds and retry.
 
 ## Recurring deposits
 
-The Deposits page (`/deposits`) has two parts:
+The Deposits and Withdrawals page (`/deposits`) has two parts:
 
-- **Deposit History** — the actual `deposits` ledger. Add a one-time entry directly, or
+- **Transaction History** — the actual `deposits` ledger. Add a one-time entry directly, or
   let a recurring schedule generate them automatically (see below). The Source column
   shows Manual vs. Recurring.
 - **Recurring Schedules** — rules in `deposit_schedules` (account, amount, frequency,
   start/end date). A schedule doesn't create ledger rows by itself; something has to
   *materialize* it.
+
+**Withdrawals are not a separate table or column.** A withdrawal is a `deposits` (or
+`deposit_schedules`) row whose `amount` is stored **negative** — the Transaction Type
+(Deposit/Withdrawal) shown in the UI is derived from that sign, not stored on its own. This
+was a deliberate choice: every cash-position formula in the app (`usePortfolio`'s
+`cashPosition`, `scripts/fetch-prices.mjs`, `refresh-prices`, `backfill-portfolio-history.mjs`,
+and `useNetDepositsWithdrawals` above) already does a plain `sum(amount)` over `deposits`,
+which nets out correctly with negative values with no changes to any of that math, and no
+migration was needed to add the feature. `DepositForm`/`DepositScheduleForm` still take a
+plain positive number from the user and apply the sign based on a Deposit/Withdrawal toggle,
+rather than making them type a negative amount.
 
 Materialization works exactly like price refreshing, same two paths:
 
@@ -1051,7 +1091,7 @@ src/
     TickerPrices.jsx       # Per-ticker price table: inline "Update Price" edits + "Update All Prices" button
     DepositForm.jsx        # Add/edit one-time deposit modal
     DepositScheduleForm.jsx # Add/edit recurring deposit schedule modal
-    DepositsTable.jsx      # Deposit ledger table (Manual vs Recurring source badge)
+    DepositsTable.jsx      # Deposit/withdrawal ledger table (Manual vs Recurring source badge)
     DepositSchedulesTable.jsx # Recurring schedules table (active/paused status)
     WatchlistCard.jsx       # Stock Watch card: range-toggle chart, next earnings, notes
   pages/
@@ -1060,7 +1100,7 @@ src/
     TaxPage.jsx             # Tax headroom + Roth conversion tracker
     TradesPage.jsx          # Recurring trade schedules + full trade log with add/edit/filter
     PricesPage.jsx          # Manual price overrides (/prices)
-    DepositsPage.jsx        # Deposit ledger + recurring schedules (/deposits)
+    DepositsPage.jsx        # Deposit/withdrawal ledger + recurring schedules (/deposits)
     StockWatchPage.jsx      # Watchlist: add ticker, view chart/earnings/notes (/watch)
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")

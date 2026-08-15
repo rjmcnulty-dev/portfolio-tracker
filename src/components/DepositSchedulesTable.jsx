@@ -15,15 +15,21 @@ const FREQUENCY_LABELS = {
   monthly: 'Monthly',
 }
 
+// Same convention as DepositsTable.jsx — a recurring withdrawal is a
+// schedule whose amount is stored negative, not a separate field.
+function transactionTypeValue(row) {
+  return Number(row.amount) < 0 ? 'Withdrawal' : 'Deposit'
+}
+
 export default function DepositSchedulesTable({ schedules, deposits = [], showAccount = true, onEdit, onDelete }) {
   const [confirmingSchedule, setConfirmingSchedule] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
 
   if (!schedules.length) {
-    return <div className="deposits-table__empty">No recurring deposits set up yet.</div>
+    return <div className="deposits-table__empty">No recurring deposits or withdrawals set up yet.</div>
   }
 
-  const columnCount = (showAccount ? 1 : 0) + 7 + (onEdit || onDelete ? 1 : 0)
+  const columnCount = (showAccount ? 1 : 0) + 8 + (onEdit || onDelete ? 1 : 0)
 
   return (
     <div className="deposits-table-wrap">
@@ -31,6 +37,7 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
         <thead>
           <tr>
             {showAccount && <th>Account</th>}
+            <th>Deposit/Withdrawal</th>
             <th className="is-numeric">Amount</th>
             <th>Frequency</th>
             <th>Start</th>
@@ -58,7 +65,12 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
                       <span className="account-badge">{schedule.account}</span>
                     </td>
                   )}
-                  <td className="is-numeric">{formatCurrency(schedule.amount)}</td>
+                  <td className={transactionTypeValue(schedule) === 'Withdrawal' ? 'is-negative' : 'is-positive'}>
+                    {transactionTypeValue(schedule)}
+                  </td>
+                  <td className={`is-numeric ${transactionTypeValue(schedule) === 'Withdrawal' ? 'is-negative' : 'is-positive'}`}>
+                    {formatCurrency(schedule.amount)}
+                  </td>
                   <td>{FREQUENCY_LABELS[schedule.frequency] ?? schedule.frequency}</td>
                   <td>{schedule.start_date}</td>
                   <td>{schedule.end_date ?? '—'}</td>
@@ -99,6 +111,7 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
                             <thead>
                               <tr>
                                 <th>Date</th>
+                                <th>Deposit/Withdrawal</th>
                                 <th className="is-numeric">Amount</th>
                                 <th>Type</th>
                                 <th>Notes</th>
@@ -108,7 +121,12 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
                               {occurrences.map((deposit) => (
                                 <tr key={deposit.id}>
                                   <td>{deposit.deposit_date}</td>
-                                  <td className="is-numeric">{formatCurrency(deposit.amount)}</td>
+                                  <td className={transactionTypeValue(deposit) === 'Withdrawal' ? 'is-negative' : 'is-positive'}>
+                                    {transactionTypeValue(deposit)}
+                                  </td>
+                                  <td className={`is-numeric ${transactionTypeValue(deposit) === 'Withdrawal' ? 'is-negative' : 'is-positive'}`}>
+                                    {formatCurrency(deposit.amount)}
+                                  </td>
                                   <td>{deposit.deposit_type ?? '—'}</td>
                                   <td>{deposit.notes || '—'}</td>
                                 </tr>
@@ -116,12 +134,12 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
                             </tbody>
                           </table>
                           <p className="deposits-table__detail-summary">
-                            {occurrences.length} deposit{occurrences.length === 1 ? '' : 's'} materialized, totaling{' '}
+                            {occurrences.length} transaction{occurrences.length === 1 ? '' : 's'} materialized, netting{' '}
                             {formatCurrency(occurrences.reduce((sum, d) => sum + (Number(d.amount) || 0), 0))}
                           </p>
                         </div>
                       ) : (
-                        <p className="deposits-table__detail-empty">No deposits materialized from this schedule yet.</p>
+                        <p className="deposits-table__detail-empty">No transactions materialized from this schedule yet.</p>
                       )}
                     </td>
                   </tr>
@@ -133,8 +151,8 @@ export default function DepositSchedulesTable({ schedules, deposits = [], showAc
       </table>
       {confirmingSchedule && (
         <ConfirmDialog
-          title="Delete recurring deposit?"
-          message={`Delete the ${formatCurrency(confirmingSchedule.amount)} ${FREQUENCY_LABELS[confirmingSchedule.frequency]?.toLowerCase() ?? confirmingSchedule.frequency} schedule for ${confirmingSchedule.account}? Already-materialized deposits are not affected.`}
+          title="Delete recurring transaction?"
+          message={`Delete the ${formatCurrency(confirmingSchedule.amount)} ${FREQUENCY_LABELS[confirmingSchedule.frequency]?.toLowerCase() ?? confirmingSchedule.frequency} schedule for ${confirmingSchedule.account}? Already-materialized transactions are not affected.`}
           onCancel={() => setConfirmingSchedule(null)}
           onConfirm={() => {
             onDelete(confirmingSchedule.id)

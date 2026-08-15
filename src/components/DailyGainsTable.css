@@ -2,17 +2,49 @@
   margin-bottom: 16px;
 }
 
+.daily-gains__value-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.daily-gains__value-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-gains__value-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.daily-gains__value-amount {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy-dark);
+}
+
+.daily-gains__value-amount.is-positive {
+  color: var(--green);
+}
+
+.daily-gains__value-amount.is-negative {
+  color: var(--red);
+}
+
 .daily-gains__header {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
-}
-
-.daily-gains__header .chart-card__title {
-  margin-bottom: 0;
 }
 
 .daily-gains__range-picker {
