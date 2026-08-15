@@ -1,0 +1,105 @@
+.daily-gains {
+  margin-bottom: 16px;
+}
+
+.daily-gains__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.daily-gains__header .chart-card__title {
+  margin-bottom: 0;
+}
+
+.daily-gains__range-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.daily-gains__range-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.daily-gains__range-picker input[type='date'],
+.daily-gains__range-picker select {
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+.daily-gains__table-wrap {
+  overflow-x: auto;
+}
+
+.daily-gains__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.daily-gains__table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--navy-dark);
+  color: var(--text-on-dark);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.daily-gains__table th.is-numeric {
+  text-align: right;
+}
+
+.daily-gains__table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #edf0f3;
+  color: var(--text-primary);
+}
+
+.daily-gains__table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-gains__table td.is-positive {
+  color: var(--green);
+}
+
+.daily-gains__table td.is-negative {
+  color: var(--red);
+}
+
+.daily-gains__ticker {
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.daily-gains__table tfoot td {
+  border-bottom: none;
+  border-top: 2px solid #d3d9e0;
+  font-weight: 700;
+  background: var(--surface);
+}
+
+.daily-gains__total-cell {
+  font-weight: 700;
+  border-left: 1px solid #d3d9e0;
+}
+
+.daily-gains__hint {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}

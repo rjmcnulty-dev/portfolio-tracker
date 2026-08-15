@@ -65,10 +65,10 @@ tickers you don't hold — price chart (1D through 1Y), next earnings date, and 
 
 ## Supabase SQL schema
 
-Run the following in the Supabase SQL editor. It creates the thirteen tables the app reads
+Run the following in the Supabase SQL editor. It creates the fourteen tables the app reads
 and writes: `accounts`, `trades`, `trade_lot_allocations`, `tax_settings`, `roth_conversions`,
-`ticker_prices`, `price_targets`, `portfolio_value_history`, `account_value_history`,
-`deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
+`ticker_prices`, `ticker_price_history`, `price_targets`, `portfolio_value_history`,
+`account_value_history`, `deposit_schedules`, `deposits`, `trade_schedules`, and `watchlist`.
 
 ```sql
 -- Extension needed for gen_random_uuid()
@@ -180,6 +180,28 @@ create table if not exists ticker_prices (
   as_of date,
   updated_at timestamptz not null default now()
 );
+
+-- ─────────────────────────────────────────────
+-- ticker_price_history: one row per (ticker, day),
+-- unlike ticker_prices which only keeps the latest.
+-- Written going forward by the same daily job that
+-- writes ticker_prices; backfilled once via
+-- scripts/backfill-portfolio-history.mjs (it already
+-- fetches each ticker's full daily history to compute
+-- portfolio value, so this rides along for free). Lets
+-- the Daily Gains table compute today-vs-yesterday
+-- price moves per ticker without a live API call on
+-- every page load (see "Daily gains" below).
+-- ─────────────────────────────────────────────
+create table if not exists ticker_price_history (
+  ticker text not null,
+  as_of date not null,
+  price numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (ticker, as_of)
+);
+
+create index if not exists ticker_price_history_ticker_idx on ticker_price_history (ticker);
 
 -- ─────────────────────────────────────────────
 -- price_targets: your own manually-set price
@@ -340,6 +362,7 @@ alter table trade_lot_allocations enable row level security;
 alter table tax_settings enable row level security;
 alter table roth_conversions enable row level security;
 alter table ticker_prices enable row level security;
+alter table ticker_price_history enable row level security;
 alter table price_targets enable row level security;
 alter table portfolio_value_history enable row level security;
 alter table account_value_history enable row level security;
@@ -354,6 +377,7 @@ create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for 
 create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
 create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
 create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
+create policy "Allow all on ticker_price_history" on ticker_price_history for all using (true) with check (true);
 create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
 create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
 create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
@@ -530,6 +554,30 @@ alter table price_targets enable row level security;
 create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
 ```
 
+**If you already have a database from before the Daily Gains table**, run this migration
+to add `ticker_price_history`, then re-run `npm run portfolio:backfill` once (it now also
+backfills this table, using history it already fetches) so "yesterday's price" is available
+immediately instead of only after two days of the app running forward:
+
+```sql
+create table if not exists ticker_price_history (
+  ticker text not null,
+  as_of date not null,
+  price numeric not null,
+  created_at timestamptz not null default now(),
+  primary key (ticker, as_of)
+);
+
+create index if not exists ticker_price_history_ticker_idx on ticker_price_history (ticker);
+
+alter table ticker_price_history enable row level security;
+create policy "Allow all on ticker_price_history" on ticker_price_history for all using (true) with check (true);
+```
+
+```bash
+npm run portfolio:backfill
+```
+
 ## Daily price refresh
 
 `scripts/fetch-prices.mjs` is a small Node script that:
@@ -612,6 +660,43 @@ It's rate-limited the same way as the price-refresh scripts (8 Twelve Data credi
 so it can take a few minutes with more than a handful of tickers. A day where an open
 position's ticker has no price data yet (e.g. a brand-new listing) is skipped rather than
 written as a misleading $0 — the chart will just have a gap there.
+
+## Daily gains
+
+The **Daily Gains** table on each account page (below that account's Value chart) is a
+matrix: one row per held ticker, one column per trading day, each cell showing that
+ticker's price-driven $ change for that specific day (hover a cell for its % change) —
+`(that day's price − prior day's price) × quantity held before that day's own trades`. The
+quantity is **not** today's current holding applied uniformly across every column — it's
+replayed from `trades` per day, so shares bought or sold partway through the shown range
+are only counted on the days you actually held them. Shares bought on a given day don't
+contribute to that day's price-driven gain (their cost basis *is* that day's price, so
+there's nothing to have moved yet); shares sold on a given day still count for that day
+(you held them going into it) but not after. A **Total** row along the bottom sums every
+ticker for each day, and a **Total** column on the right sums each ticker across every
+visible day. This is *only* price movement: a deposit or a trade executed that day doesn't
+show up here as a gain — the same distinction `portfolio_value_history`'s `total_value`
+deliberately blurs (it includes cash) that this table deliberately doesn't.
+
+Defaults to the 5 most recent trading days with data; the From/To date inputs switch to an
+explicit range, and "Last 5 Days" resets back. The **Week** dropdown is a shortcut to the
+same thing — "Last Week," "2 weeks ago," etc. — partitioning the available trading days into
+5-day chunks counting back from today, not calendar Mon-Sun weeks (a holiday-shortened week
+still counts as one chunk). Columns come from whichever dates actually
+have price history for the held tickers (the union across all of them), not a fixed
+calendar walk — so a weekend or a gap in one ticker's history doesn't produce an empty
+column or misalign the row. Each day's change is computed from that ticker's own full
+fetched history, not sliced to the display range first, so the leftmost visible column
+still has a valid prior-day reference even when that prior day itself falls outside the
+selected range.
+
+`ticker_price_history` (one row per ticker per day, unlike `ticker_prices` which only keeps
+the latest) is written going forward by the same daily job that already writes
+`ticker_prices` — `scripts/fetch-prices.mjs` and the `refresh-prices` Edge Function, at no
+extra API cost, since the price was already being fetched. History from before this feature
+shipped comes from `scripts/backfill-portfolio-history.mjs`, which also already fetches each
+ticker's full daily history to compute portfolio value, so this rides along there too — see
+the migration note under "Supabase SQL schema" for existing databases.
 
 ## Performance Evaluator
 

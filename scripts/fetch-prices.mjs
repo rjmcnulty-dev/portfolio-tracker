@@ -132,6 +132,15 @@ async function main() {
   const { error: upsertError } = await supabase.from('ticker_prices').upsert(rows, { onConflict: 'ticker' })
   if (upsertError) throw upsertError
 
+  // Same prices, no extra API cost — just also keeping a dated history
+  // instead of only the latest, so the Daily Gains table can look up
+  // yesterday's price per ticker.
+  const historyRows = rows.map(({ ticker, price, as_of }) => ({ ticker, price, as_of }))
+  const { error: historyError } = await supabase
+    .from('ticker_price_history')
+    .upsert(historyRows, { onConflict: 'ticker,as_of' })
+  if (historyError) throw historyError
+
   console.log(`Updated prices for ${rows.length} ticker(s): ${rows.map((r) => r.ticker).join(', ')}`)
 
   const totalValue = computeCashPosition(deposits, trades) + computeHoldingsValue(computeQuantitiesByTicker(trades), quotes)

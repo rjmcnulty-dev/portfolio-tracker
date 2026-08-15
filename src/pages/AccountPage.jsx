@@ -10,6 +10,7 @@ import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
 import PerformanceEvaluator from '../components/PerformanceEvaluator'
+import DailyGainsTable from '../components/DailyGainsTable'
 
 // Every account page matches the same route (/account/:accountSlug), so
 // React Router reuses one AccountPage instance across tabs instead of
@@ -69,6 +70,7 @@ function AccountPageContent({ accountLabel }) {
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
           <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} />
+          <DailyGainsTable holdings={holdings} trades={trades} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

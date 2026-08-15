@@ -200,6 +200,19 @@ Deno.serve(async (req) => {
     return json({ error: upsertError.message }, 500);
   }
 
+  // Same prices, no extra API cost — also keeps a dated history instead of
+  // only the latest, so the Daily Gains table can look up yesterday's price
+  // per ticker. Unlike the portfolio/account snapshots below, this is worth
+  // doing even for a single-ticker "Auto Update" — one ticker's history is
+  // still useful, unlike a portfolio total that needs every holding priced.
+  const historyRows = rows.map(({ ticker, price, as_of }) => ({ ticker, price, as_of }));
+  const { error: historyError } = await supabase
+    .from("ticker_price_history")
+    .upsert(historyRows, { onConflict: "ticker,as_of" });
+  if (historyError) {
+    return json({ error: historyError.message }, 500);
+  }
+
   // Only a full refresh (every held ticker) reflects a real day's portfolio
   // value — a single-ticker "Auto Update" doesn't have prices for the rest
   // of the holdings, so it can't produce a meaningful snapshot.

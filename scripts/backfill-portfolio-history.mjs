@@ -1,8 +1,9 @@
 // One-time script: reconstructs `portfolio_value_history` (all accounts
-// combined) and `account_value_history` (one row per account) for every day
-// from your first trade up through yesterday (today's rows come from the
-// regular daily price-refresh job instead, so both paths never disagree
-// about "today"). Run this once after adding both tables —
+// combined), `account_value_history` (one row per account), and
+// `ticker_price_history` (one row per ticker, for the Daily Gains table) for
+// every day from your first trade up through yesterday (today's rows come
+// from the regular daily price-refresh job instead, so both paths never
+// disagree about "today"). Run this once after adding these tables —
 // scripts/fetch-prices.mjs and the refresh-prices Edge Function take over
 // from there, appending one new day at a time going forward.
 //
@@ -157,6 +158,30 @@ async function main() {
 
   const historyByTicker = await fetchAllHistories(tickers)
   const priceCursors = new Map([...historyByTicker].map(([ticker, history]) => [ticker, makePriceCursor(history)]))
+
+  // ticker_price_history rides along for free — this history was already
+  // fetched to compute portfolio value above. Bounded to the same
+  // startDate..endDate window as everything else, not the full 5000-bar
+  // fetch, so tickers with years of trading history before you ever bought
+  // them don't bloat the table with rows nothing reads.
+  const tickerHistoryRows = []
+  for (const [ticker, history] of historyByTicker) {
+    for (const point of history) {
+      if (point.date < startDate || point.date > endDate) continue
+      tickerHistoryRows.push({ ticker, as_of: point.date, price: point.close })
+    }
+  }
+  const TICKER_HISTORY_BATCH_SIZE = 500
+  for (let i = 0; i < tickerHistoryRows.length; i += TICKER_HISTORY_BATCH_SIZE) {
+    const batch = tickerHistoryRows.slice(i, i + TICKER_HISTORY_BATCH_SIZE)
+    const { error: tickerHistoryError } = await supabase
+      .from('ticker_price_history')
+      .upsert(batch, { onConflict: 'ticker,as_of' })
+    if (tickerHistoryError) throw tickerHistoryError
+  }
+  if (tickerHistoryRows.length) {
+    console.log(`Wrote ${tickerHistoryRows.length} ticker_price_history row(s).`)
+  }
 
   // Trades/deposits grouped by date so each day's cash- and
   // holdings-changing events can be applied in one pass as the day-by-day
