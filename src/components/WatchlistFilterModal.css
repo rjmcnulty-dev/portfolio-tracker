@@ -1,0 +1,48 @@
+.watchlist-filter-modal__hint {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.watchlist-filter-modal__actions {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.watchlist-filter-modal__list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.watchlist-filter-modal__item label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.watchlist-filter-modal__item input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #d3d9e0;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.watchlist-filter-modal__summary {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}

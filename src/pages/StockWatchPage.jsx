@@ -3,6 +3,7 @@ import { useWatchlist } from '../hooks/useWatchlist'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
+import WatchlistFilterModal from '../components/WatchlistFilterModal'
 
 export default function StockWatchPage() {
   const { watchlist, loading, error, addTicker, updateNotes, removeTicker } = useWatchlist()
@@ -10,6 +11,12 @@ export default function StockWatchPage() {
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [showFilterModal, setShowFilterModal] = useState(false)
+  // Empty by default — nothing hidden — so a newly-added ticker is always
+  // visible immediately rather than silently starting out hidden. Purely a
+  // display filter: hiding a card doesn't touch the watchlist itself, and
+  // an unmounted (hidden) card's useStockQuote doesn't fetch anything.
+  const [hiddenTickers, setHiddenTickers] = useState(new Set())
   // Per-ticker rather than one shared object, purely so each card's own
   // useEffect only re-applies when ITS entry's version changes.
   const [syncMap, setSyncMap] = useState(new Map())
@@ -36,6 +43,13 @@ export default function StockWatchPage() {
     setSubchartsBroadcast((prev) => ({ visible: !prev.visible, version: prev.version + 1 }))
   }
 
+  // Same hiddenTickers Set the Filter modal reads/writes — a card's own
+  // Hide button and the modal are just two entry points to the one source
+  // of truth, so they can never drift out of sync with each other.
+  function handleHide(ticker) {
+    setHiddenTickers((prev) => new Set(prev).add(ticker))
+  }
+
   function handleApplySync(settings) {
     const tickers = watchlist.map((item) => item.ticker)
     setSyncMap((prev) => {
@@ -47,6 +61,8 @@ export default function StockWatchPage() {
       return next
     })
   }
+
+  const visibleWatchlist = watchlist.filter((item) => !hiddenTickers.has(item.ticker))
 
   async function handleAdd(event) {
     event.preventDefault()
@@ -75,6 +91,9 @@ export default function StockWatchPage() {
         </div>
         {watchlist.length > 0 && (
           <div className="filters">
+            <button className="btn btn--ghost" onClick={() => setShowFilterModal(true)}>
+              Filter{hiddenTickers.size > 0 ? ` (${hiddenTickers.size} hidden)` : ''}
+            </button>
             <button className="btn btn--ghost" onClick={handleToggleAllSubcharts}>
               {subchartsBroadcast.visible ? 'Hide All Subcharts' : 'Show All Subcharts'}
             </button>
@@ -108,13 +127,18 @@ export default function StockWatchPage() {
         <p className="page__loading">Loading watchlist…</p>
       ) : watchlist.length === 0 ? (
         <p className="page__loading">No tickers yet — add one above.</p>
+      ) : visibleWatchlist.length === 0 ? (
+        <p className="page__loading">
+          Every card is hidden — <button className="btn-link" onClick={() => setShowFilterModal(true)}>open Filter</button> to show some.
+        </p>
       ) : (
         <div className="chart-grid">
-          {watchlist.map((item) => (
+          {visibleWatchlist.map((item) => (
             <WatchlistCard
               key={item.id}
               item={item}
               onRemove={removeTicker}
+              onHide={handleHide}
               onSaveNotes={updateNotes}
               syncSettings={syncMap.get(item.ticker)}
               subchartsBroadcast={subchartsBroadcast}
@@ -124,6 +148,14 @@ export default function StockWatchPage() {
       )}
 
       {showSyncModal && <WatchlistSyncModal onApply={handleApplySync} onClose={() => setShowSyncModal(false)} />}
+      {showFilterModal && (
+        <WatchlistFilterModal
+          watchlist={watchlist}
+          hiddenTickers={hiddenTickers}
+          onApply={setHiddenTickers}
+          onClose={() => setShowFilterModal(false)}
+        />
+      )}
     </div>
   )
 }

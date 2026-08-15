@@ -390,7 +390,7 @@ function ObvChart({ chartData, range, trendPeriod, height }) {
   )
 }
 
-export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSettings, subchartsBroadcast }) {
+export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syncSettings, subchartsBroadcast }) {
   const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
@@ -592,6 +592,9 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
           </button>
           <button className="btn-link" onClick={() => setExpanded(true)}>
             Expand
+          </button>
+          <button className="btn-link" onClick={() => onHide(item.ticker)}>
+            Hide
           </button>
           <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
             Remove

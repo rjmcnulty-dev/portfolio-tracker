@@ -1076,6 +1076,22 @@ All Subcharts** button in the page header — a lighter broadcast than "Sync All
 it, since it only flips subchart visibility and leaves each card's own range/MA/levels/
 earnings settings alone.
 
+**Filter** (`src/components/WatchlistFilterModal.jsx`), also in the page header, is a checkbox
+list of every ticker on the watchlist — unchecking one hides its card from the page without
+removing it from the watchlist. Purely a display filter, tracked as a `hiddenTickers` Set in
+`StockWatchPage` (empty by default, so a newly-added ticker is always visible immediately
+rather than silently starting out hidden) — nothing is persisted, so it resets on reload. A
+hidden card's `WatchlistCard` isn't rendered at all rather than CSS-hidden, so it isn't
+fetching data it doesn't need to; showing it again re-mounts it fresh (a real reload of that
+card's chart, same as if you'd just added the ticker). The header button shows a count when
+anything's hidden (e.g. "Filter (2 hidden)"), and hiding every card swaps the grid for a
+message linking back to the Filter modal instead of just going blank.
+
+Each card also has its own **Hide** button (next to Expand, just left of Remove) as a
+one-click shortcut to hiding that one card — it writes to the exact same `hiddenTickers` Set
+the Filter modal does (via an `onHide` callback passed down from `StockWatchPage`), so the two
+can never disagree about what's currently hidden.
+
 **Short interest was investigated and isn't available for free.** Neither Twelve Data
 (`/statistics`, where it'd live, is 403 on the free tier — pro/ultra/venture/enterprise
 only) nor Finnhub (`/stock/short-interest` is 403 free-tier too; `/stock/metric` works but
@@ -1387,6 +1403,7 @@ src/
     DepositsTable.jsx      # Deposit/withdrawal ledger table (Manual vs Recurring source badge)
     DepositSchedulesTable.jsx # Recurring schedules table (active/paused status)
     WatchlistCard.jsx       # Stock Watch card: range-toggle chart, next earnings, notes
+    WatchlistFilterModal.jsx # Checkbox list to hide/show cards on the Stock Watch page
   pages/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view, resolved from the URL slug via accounts
