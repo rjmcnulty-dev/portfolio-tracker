@@ -856,6 +856,21 @@ That function combines two providers:
   its free `/earnings` endpoint only returns *past* reports. Finnhub's free tier has a real,
   documented earnings-calendar endpoint, so that's used instead of scraping a finance
   site's HTML (fragile, likely against its ToS) or estimating from historical cadence.
+- **Finnhub** `stock/profile2` for company name and float (`floatingShare`, reported in
+  millions of shares) — one call gets both, so float rides along for free on a request the
+  card was already making.
+
+**Short interest was investigated and isn't available for free.** Neither Twelve Data
+(`/statistics`, where it'd live, is 403 on the free tier — pro/ultra/venture/enterprise
+only) nor Finnhub (`/stock/short-interest` is 403 free-tier too; `/stock/metric` works but
+only has per-share financial ratios, no float or short interest) expose it without a paid
+plan. A few other providers (ORTEX, Massive, ValueInvesting.io) advertise free short
+interest access, but none were verified against a real ticker — their docs are ambiguous
+about whether the free tier includes real per-symbol data or just a sandbox/aggregate view.
+Don't build against one without testing a real ticker first and reading the actual response
+— "free-looking" in marketing copy isn't the same as free (Twelve Data's own `/price_target`
+looked free too, because it special-cases `AAPL` as an always-open demo symbol regardless
+of plan; every other symbol 403s).
 
 Deploy/redeploy the same way as the other functions:
 

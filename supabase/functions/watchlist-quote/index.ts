@@ -75,15 +75,33 @@ async function fetchNextEarningsDate(ticker: string, apiKey: string): Promise<st
   return entries.map((e) => e.date).sort()[0];
 }
 
-// Company name, via Finnhub's much more generous free-tier limit (60/min)
-// rather than spending another Twelve Data credit against the tight 8/min
-// budget the chart call already uses.
-async function fetchCompanyName(ticker: string, apiKey: string): Promise<string | null> {
+interface CompanyProfile {
+  companyName: string | null;
+  floatShares: number | null;
+  sharesOutstanding: number | null;
+}
+
+// Company name + float + shares outstanding, from one Finnhub call (much
+// more generous free-tier limit, 60/min, than spending another Twelve Data
+// credit against the tight 8/min budget the chart call already uses). Float
+// and shares outstanding ride along for free — both were already in this
+// same response, just unused until now. sharesOutstanding lets the client
+// show float as a % of total shares (i.e. how much of the company is
+// actually free-floating vs. closely held). Short interest was investigated
+// too but isn't available on any free tier checked (Twelve Data's
+// /statistics, Finnhub's dedicated short-interest endpoint) — see README's
+// "Stock Watch" section.
+async function fetchCompanyProfile(ticker: string, apiKey: string): Promise<CompanyProfile> {
   const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${apiKey}`;
   const res = await fetch(url);
-  if (!res.ok) return null;
+  if (!res.ok) return { companyName: null, floatShares: null, sharesOutstanding: null };
   const body = await res.json();
-  return body?.name || null;
+  return {
+    companyName: body?.name || null,
+    // Finnhub reports both of these in millions of shares (e.g. 1126.1 == ~1.13B).
+    floatShares: typeof body?.floatingShare === "number" ? body.floatingShare : null,
+    sharesOutstanding: typeof body?.shareOutstanding === "number" ? body.shareOutstanding : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -112,13 +130,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const [series, nextEarningsDate, companyName] = await Promise.all([
+    const [series, nextEarningsDate, profile] = await Promise.all([
       fetchSeries(ticker, range, twelveDataApiKey),
       fetchNextEarningsDate(ticker, finnhubApiKey),
-      fetchCompanyName(ticker, finnhubApiKey).catch(() => null),
+      fetchCompanyProfile(ticker, finnhubApiKey).catch(() => ({
+        companyName: null,
+        floatShares: null,
+        sharesOutstanding: null,
+      })),
     ]);
 
-    return json({ series, nextEarningsDate, companyName });
+    return json({
+      series,
+      nextEarningsDate,
+      companyName: profile.companyName,
+      floatShares: profile.floatShares,
+      sharesOutstanding: profile.sharesOutstanding,
+    });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 502);
   }

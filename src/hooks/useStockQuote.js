@@ -6,6 +6,8 @@ export function useStockQuote(ticker, range) {
   const [series, setSeries] = useState([])
   const [nextEarningsDate, setNextEarningsDate] = useState(null)
   const [companyName, setCompanyName] = useState(null)
+  const [floatShares, setFloatShares] = useState(null)
+  const [sharesOutstanding, setSharesOutstanding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -36,6 +38,8 @@ export function useStockQuote(ticker, range) {
       setSeries(data.series ?? [])
       setNextEarningsDate(data.nextEarningsDate ?? null)
       setCompanyName(data.companyName ?? null)
+      setFloatShares(data.floatShares ?? null)
+      setSharesOutstanding(data.sharesOutstanding ?? null)
     } catch (err) {
       if (requestId !== latestRequestId.current) return
       setError(err.message)
@@ -58,5 +62,5 @@ export function useStockQuote(ticker, range) {
     load(ticker, range)
   }, [ticker, range, load])
 
-  return { series, nextEarningsDate, companyName, loading, error, refresh }
+  return { series, nextEarningsDate, companyName, floatShares, sharesOutstanding, loading, error, refresh }
 }

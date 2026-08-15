@@ -46,6 +46,26 @@ function formatEarningsDate(dateStr) {
   })
 }
 
+// Finnhub reports floatShares/sharesOutstanding in millions (e.g. 1126.1 ==
+// ~1.13B shares). The percent is float's share of total shares outstanding
+// — how much of the company is freely tradable vs. closely held (insiders,
+// restricted stock, etc.), not a percent of some other "publicly held"
+// total, since shares outstanding already represents 100% of the company.
+function formatFloat(floatMillions, sharesOutstandingMillions) {
+  if (floatMillions == null) return 'Not available'
+  const shares = floatMillions * 1_000_000
+  const formatted =
+    shares >= 1_000_000_000
+      ? `${(shares / 1_000_000_000).toFixed(2)}B shares`
+      : shares >= 1_000_000
+        ? `${(shares / 1_000_000).toFixed(1)}M shares`
+        : `${shares.toLocaleString('en-US')} shares`
+
+  if (!sharesOutstandingMillions) return formatted
+  const pct = (floatMillions / sharesOutstandingMillions) * 100
+  return `${formatted} (${pct.toFixed(1)}% of shares outstanding)`
+}
+
 function ChartControls({ range, setRange, indicators, levelCount, setLevelCount, showLevels }) {
   return (
     <>
@@ -223,7 +243,8 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesError, setNotesError] = useState(null)
 
-  const { series, nextEarningsDate, companyName, loading, error, refresh } = useStockQuote(item.ticker, range)
+  const { series, nextEarningsDate, companyName, floatShares, sharesOutstanding, loading, error, refresh } =
+    useStockQuote(item.ticker, range)
 
   const latestPrice = series.length ? series[series.length - 1].close : null
   const firstPrice = series.length ? series[0].close : null
@@ -324,6 +345,11 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
         <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
       </div>
 
+      <div className="watchlist-card__earnings">
+        <span className="watchlist-card__earnings-label">Float</span>
+        <span className="watchlist-card__earnings-value">{formatFloat(floatShares, sharesOutstanding)}</span>
+      </div>
+
       <div className="watchlist-card__notes">
         <label>
           Notes
@@ -374,6 +400,11 @@ export default function WatchlistCard({ item, onRemove, onSaveNotes, syncSetting
             <div className="watchlist-card__earnings">
               <span className="watchlist-card__earnings-label">Next Earnings</span>
               <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
+            </div>
+
+            <div className="watchlist-card__earnings">
+              <span className="watchlist-card__earnings-label">Float</span>
+              <span className="watchlist-card__earnings-value">{formatFloat(floatShares, sharesOutstanding)}</span>
             </div>
           </div>
         </div>
