@@ -54,6 +54,25 @@ export function smoothPoints(points, period) {
   return result
 }
 
+// Exponential moving average of a {date, value} point series — same
+// "already-computed indicator points" use case as smoothPoints (a plain
+// SMA), but weights recent points more heavily via the standard smoothing
+// factor 2/(period+1), so it reacts faster to new changes than an SMA of
+// the same period. Seeded with the SMA of the first `period` points (same
+// "no output until a full window exists" convention as smoothPoints), then
+// recurses forward from there.
+export function computeEMA(points, period) {
+  if (points.length < period) return []
+  const k = 2 / (period + 1)
+  const seed = points.slice(0, period).reduce((sum, p) => sum + p.value, 0) / period
+  const result = [{ date: points[period - 1].date, value: seed }]
+  for (let i = period; i < points.length; i++) {
+    const prev = result[result.length - 1].value
+    result.push({ date: points[i].date, value: points[i].value * k + prev * (1 - k) })
+  }
+  return result
+}
+
 // Stochastic Oscillator: %K measures where the close sits within the
 // high/low range of the trailing `kPeriod` bars (0 = at the period's low,
 // 100 = at its high); %D is a `dPeriod`-bar SMA of %K, a signal line. %K

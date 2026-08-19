@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { useStockQuote } from '../hooks/useStockQuote'
 import {
+  computeEMA,
   computeOBV,
   computeSMA,
   computeStochastic,
@@ -26,7 +27,7 @@ import './WatchlistCard.css'
 const DEFAULT_MA_PERIODS = [20, 50, 200]
 const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
 const DEFAULT_STOCHASTIC_TUNING = { kPeriod: 14, kSmoothing: 3, dPeriod: 3, overbought: 80, oversold: 20 }
-const DEFAULT_OBV_TUNING = { trendPeriod: 20 }
+const DEFAULT_OBV_TUNING = { trendPeriod: 20, emaPeriod: 20 }
 
 // 20D/50D/200D fetch enough history (2x the period — see watchlist-quote's
 // RANGE_PARAMS) that the matching moving average (MA20/50/200) renders as a
@@ -358,9 +359,11 @@ function ObvTooltip({ active, payload, label }) {
 // gets its own auto-scaled y-axis. Only the trend/slope is meaningful, never
 // the absolute level, which is why there's no reference line here the way
 // Stochastic has overbought/oversold thresholds — the trend line (a plain
-// SMA of OBV, the standard "OBV signal line") is what actually shows the
-// underlying direction, since raw OBV is jumpy day to day.
-function ObvChart({ chartData, range, trendPeriod, height }) {
+// SMA of OBV, the standard "OBV signal line") and the EMA line (same idea,
+// but reacts faster to recent changes since it weights them more heavily)
+// are what actually show the underlying direction, since raw OBV is jumpy
+// day to day.
+function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
@@ -385,6 +388,15 @@ function ObvChart({ chartData, range, trendPeriod, height }) {
           strokeWidth={1.5}
           connectNulls={false}
         />
+        <Line
+          type="monotone"
+          dataKey="obvEma"
+          name={`EMA (${emaPeriod})`}
+          stroke="var(--light-blue)"
+          dot={false}
+          strokeWidth={1.5}
+          connectNulls={false}
+        />
       </LineChart>
     </ResponsiveContainer>
   )
@@ -395,6 +407,11 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
   const obvTuning = useConfigValue('obv_tuning', DEFAULT_OBV_TUNING)
+  // Falls back per-field, not just when the whole row is missing — an
+  // obv_tuning row saved before emaPeriod existed won't have that key at
+  // all, and useConfigValue only substitutes DEFAULT_OBV_TUNING when the
+  // row itself is absent, not per-missing-field.
+  const obvEmaPeriod = obvTuning.emaPeriod ?? DEFAULT_OBV_TUNING.emaPeriod
   const [range, setRange] = useState('1M')
   const [showSMA20, setShowSMA20] = useState(true)
   const [showSMA50, setShowSMA50] = useState(true)
@@ -484,6 +501,7 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
   )
   const obv = useMemo(() => computeOBV(series), [series])
   const obvTrend = useMemo(() => smoothPoints(obv, obvTuning.trendPeriod), [obv, obvTuning])
+  const obvEma = useMemo(() => computeEMA(obv, obvEmaPeriod), [obv, obvEmaPeriod])
 
   const chartData = useMemo(
     () =>
@@ -495,8 +513,9 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
         { key: 'stochD', points: stochastic.d },
         { key: 'obv', points: obv },
         { key: 'obvTrend', points: obvTrend },
+        { key: 'obvEma', points: obvEma },
       ]),
-    [series, sma20, sma50, sma200, stochastic, obv, obvTrend],
+    [series, sma20, sma50, sma200, stochastic, obv, obvTrend, obvEma],
   )
 
   function handleLevelCountChange(n) {
@@ -633,8 +652,16 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
           )}
           {showOBV && obv.length > 0 && (
             <>
-              <span className="watchlist-card__stochastic-label">On Balance Volume (Trend: {obvTuning.trendPeriod})</span>
-              <ObvChart chartData={chartData} range={range} trendPeriod={obvTuning.trendPeriod} height={100} />
+              <span className="watchlist-card__stochastic-label">
+                On Balance Volume (Trend: {obvTuning.trendPeriod}, EMA: {obvEmaPeriod})
+              </span>
+              <ObvChart
+                chartData={chartData}
+                range={range}
+                trendPeriod={obvTuning.trendPeriod}
+                emaPeriod={obvEmaPeriod}
+                height={100}
+              />
             </>
           )}
         </>
@@ -721,8 +748,16 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
                 )}
                 {showOBV && obv.length > 0 && (
                   <>
-                    <span className="watchlist-card__stochastic-label">On Balance Volume (Trend: {obvTuning.trendPeriod})</span>
-                    <ObvChart chartData={chartData} range={range} trendPeriod={obvTuning.trendPeriod} height={160} />
+                    <span className="watchlist-card__stochastic-label">
+                      On Balance Volume (Trend: {obvTuning.trendPeriod}, EMA: {obvEmaPeriod})
+                    </span>
+                    <ObvChart
+                      chartData={chartData}
+                      range={range}
+                      trendPeriod={obvTuning.trendPeriod}
+                      emaPeriod={obvEmaPeriod}
+                      height={160}
+                    />
                   </>
                 )}
               </>

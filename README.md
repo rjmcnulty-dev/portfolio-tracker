@@ -1066,9 +1066,21 @@ cost.
 Raw OBV is jumpy day to day, so a **Trend** line (a plain `trendPeriod`-bar SMA of OBV — the
 standard "OBV signal line," same idea as Stochastic's %D relative to %K) is plotted alongside
 it, computed via `smoothPoints` (exported from `technicalIndicators.js`, already used
-internally for Stochastic's %K/%D smoothing). Tunable from `/admin`'s App Settings
-(`obv_tuning`, default 20 — the conventional period), same pattern as every other Stock Watch
-indicator's tuning.
+internally for Stochastic's %K/%D smoothing). An **EMA** line (`emaPeriod`-bar exponential
+moving average, via the new `computeEMA` in the same file — weights recent points more heavily
+than the SMA-based Trend line does, so it reacts a bit faster to a change in direction) is
+plotted alongside both. Both periods are tunable from `/admin`'s App Settings (`obv_tuning`,
+default 20 for each — the conventional period), same pattern as every other Stock Watch
+indicator's tuning. If you added `obv_tuning` before `emaPeriod` existed, the client falls
+back to 20 per-field even if the stored row doesn't have that key yet (`useConfigValue` only
+substitutes its default when the whole row is missing, not per-missing-field). **If you already
+ran the `obv_tuning` insert below before `emaPeriod` existed**, run this once to add the field
+to your existing row so it shows up as an editable field in `/admin` too (a no-op if you're
+setting this up fresh — the insert below already includes it):
+
+```sql
+update app_config set value = value || '{"emaPeriod":20}'::jsonb where key = 'obv_tuning';
+```
 
 Both sub-charts are toggleable per-card via their own chart control ("Stochastic", "OBV"), or
 all at once (regardless of how many subcharts exist) via the **Hide All Subcharts** / **Show
@@ -1231,8 +1243,8 @@ insert into app_config (key, value, category, label, description) values
     'Clustering tolerance and swing-point window for the support/resistance levels drawn on charts, plus how close counts as "near" a level in the Performance Evaluator.'),
   ('stochastic_tuning', '{"kPeriod":14,"kSmoothing":3,"dPeriod":3,"overbought":80,"oversold":20}', 'Stock Watch', 'Stochastic Oscillator Tuning',
     '%K lookback, %K smoothing, and %D signal-line periods for the Stochastic sub-chart, plus the overbought/oversold reference levels drawn on it.'),
-  ('obv_tuning', '{"trendPeriod":20}', 'Stock Watch', 'OBV Trend Period',
-    'Bars in the moving average plotted alongside raw On Balance Volume as its trend/signal line.'),
+  ('obv_tuning', '{"trendPeriod":20,"emaPeriod":20}', 'Stock Watch', 'OBV Trend/EMA Periods',
+    'Bars in the SMA-based Trend line and the EMA line plotted alongside raw On Balance Volume.'),
   ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1}', 'Performance Evaluator', 'Buy/Sell Thresholds',
     'Trigger points for the Buy/Sell suggestion: upside % to target and trend score cutoffs.'),
   ('daily_gains_defaults', '{"defaultDayCount":5,"weekSize":5}', 'Daily Gains', 'Daily Gains Defaults',
