@@ -67,3 +67,30 @@ served as static files from wherever the API lives, or continue to live separate
    feature/table at a time (step 5) — the app keeps working throughout.
 5. Port cron jobs (step 6).
 6. Cut over hosting and retire the Supabase project (step 7).
+
+## Automating this, if doing it routinely
+
+For a one-off migration, following the checklist above by hand is cheaper than building
+tooling. If migrating several apps off this same stack, a scaffolding CLI is worth it —
+targeting the mechanical ~80% (steps 1, 2, 4, 6) and deliberately *not* automating step 3,
+since a wrong auto-translation of RLS policies into authorization code can silently create a
+security hole. The safer role for tooling there is to extract and surface every policy as a
+checklist item, not convert it.
+
+Concretely, the tool would:
+
+- **Schema**: point at the Supabase project and run `pg_dump`/`information_schema`
+  introspection, then `dotnet ef dbcontext scaffold` to generate the EF Core models.
+- **Edge Functions**: walk `supabase/functions/`, and for each one template a matching
+  minimal-API endpoint stub — same route, same request/response shape, with the actual
+  business logic left as a `// TODO: port from index.ts` marker rather than transpiled.
+- **RLS policies**: extract every policy (`using (...)`, `with check (...)`) into a
+  generated checklist document, one item per table/policy, for a human to re-implement as
+  `[Authorize]` policies or query filters — this is the one step that stays manual on
+  purpose.
+- **Frontend call sites**: grep for `supabase.from(...)` and `supabase.functions.invoke(...)`
+  calls and generate a report of every call site that needs to move to the new API client,
+  so the table-by-table frontend migration (step 5) has a concrete punch list instead of
+  relying on manual search.
+- **Cron jobs**: parse the GitHub Actions workflow YAML's `schedule:` cron expressions and
+  scaffold a matching Quartz.NET job class per script, wired to the same schedule.
