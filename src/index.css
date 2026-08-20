@@ -101,6 +101,27 @@ h3 {
   margin: 0;
 }
 
+.sidebar__section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sidebar__chevron {
+  display: inline-block;
+  color: var(--text-muted-on-dark);
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.sidebar__chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+
 .sidebar__manage-accounts {
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.16);
