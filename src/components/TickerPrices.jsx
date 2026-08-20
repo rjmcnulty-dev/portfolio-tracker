@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTrades } from '../hooks/useTrades'
+import { usePortfolio } from '../hooks/usePortfolio'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import { usePriceTargets } from '../hooks/usePriceTargets'
 import { useAccounts } from '../hooks/useAccounts'
@@ -13,6 +14,18 @@ function formatCurrency(value) {
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
+function formatPercent(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`
+}
+
+function pnlClass(value) {
+  if (value > 0) return 'is-positive'
+  if (value < 0) return 'is-negative'
+  return 'is-neutral'
+}
+
 function formatTimestamp(iso) {
   if (!iso) return 'never'
   return new Date(iso).toLocaleString('en-US', {
@@ -23,9 +36,35 @@ function formatTimestamp(iso) {
 
 export default function TickerPrices() {
   const { trades, loading: tradesLoading } = useTrades('All')
+  const { holdings, pnlByTicker } = usePortfolio('All')
   const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
   const { targets, updateTarget } = usePriceTargets()
   const { accounts } = useAccounts()
+
+  // holdings only includes tickers with an open (remaining_quantity > 0)
+  // position — a fully-closed ticker still shows up in `tickers` below (it
+  // has trade history) but won't have an entry here, which renders as "—".
+  const holdingByTicker = useMemo(() => new Map(holdings.map((h) => [h.ticker, h])), [holdings])
+
+  // Total P/L = realized (closed lots) + unrealized (open position) across
+  // the ticker's whole trade history — unlike Gain/Loss (unrealized only,
+  // from `holdings`), this stays populated even for a fully-closed ticker.
+  const totalPnlByTicker = useMemo(
+    () => new Map(pnlByTicker.map((p) => [p.ticker, p.realized + p.unrealized])),
+    [pnlByTicker],
+  )
+
+  // Open Gain/Loss % is blended (sum of $ / sum of cost basis), not an
+  // average of each row's %, so it stays weighted by position size rather
+  // than treating a small and a large holding's percent as equally
+  // significant.
+  const totals = useMemo(() => {
+    const openGainLoss = holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0)
+    const openCostBasis = holdings.reduce((sum, h) => sum + h.costBasis, 0)
+    const openGainLossPct = openCostBasis > 0 ? (openGainLoss / openCostBasis) * 100 : 0
+    const totalPnl = pnlByTicker.reduce((sum, p) => sum + p.realized + p.unrealized, 0)
+    return { openGainLoss, openGainLossPct, totalPnl }
+  }, [holdings, pnlByTicker])
 
   const [editingTicker, setEditingTicker] = useState(null)
   const [draftPrice, setDraftPrice] = useState('')
@@ -182,6 +221,10 @@ export default function TickerPrices() {
             ))}
             <th className="is-numeric">Current Price</th>
             <th>As Of</th>
+            <th className="is-numeric">Open Gain/Loss</th>
+            <th className="is-numeric" title="Realized + Unrealized P/L across this ticker's full trade history">
+              Total P/L
+            </th>
             <th className="is-numeric">Price Target</th>
             <th></th>
           </tr>
@@ -192,6 +235,8 @@ export default function TickerPrices() {
             const isEditing = editingTicker === ticker
             const targetRow = targets[ticker]
             const isEditingTarget = editingTargetTicker === ticker
+            const holding = holdingByTicker.get(ticker)
+            const totalPnl = totalPnlByTicker.get(ticker)
             return (
               <tr key={ticker}>
                 <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
@@ -219,6 +264,12 @@ export default function TickerPrices() {
                   )}
                 </td>
                 <td>{row?.as_of ?? '—'}</td>
+                <td className={`is-numeric ${holding ? pnlClass(holding.unrealizedPnl) : ''}`}>
+                  {holding ? `${formatCurrency(holding.unrealizedPnl)} (${formatPercent(holding.unrealizedPct)})` : '—'}
+                </td>
+                <td className={`is-numeric ${totalPnl != null ? pnlClass(totalPnl) : ''}`}>
+                  {totalPnl != null ? formatCurrency(totalPnl) : '—'}
+                </td>
                 <td className="is-numeric ticker-prices__target-cell">
                   {isEditingTarget ? (
                     <>
@@ -274,6 +325,22 @@ export default function TickerPrices() {
             )
           })}
         </tbody>
+        <tfoot>
+          <tr className="ticker-prices__totals-row">
+            <td>Totals</td>
+            {accounts.map((account) => (
+              <td key={account.id} className="is-held-col"></td>
+            ))}
+            <td className="is-numeric"></td>
+            <td></td>
+            <td className={`is-numeric ${pnlClass(totals.openGainLoss)}`}>
+              {formatCurrency(totals.openGainLoss)} ({formatPercent(totals.openGainLossPct)})
+            </td>
+            <td className={`is-numeric ${pnlClass(totals.totalPnl)}`}>{formatCurrency(totals.totalPnl)}</td>
+            <td className="is-numeric"></td>
+            <td></td>
+          </tr>
+        </tfoot>
       </table>
       {saveError && <p className="ticker-prices__error">{saveError}</p>}
       {autoUpdateError && <p className="ticker-prices__error">{autoUpdateError}</p>}

@@ -55,6 +55,13 @@
   background: #f8f9fb;
 }
 
+.ticker-prices__totals-row td {
+  border-bottom: none;
+  border-top: 2px solid var(--navy-dark);
+  background: var(--surface);
+  font-weight: 700;
+}
+
 .ticker-prices__ticker {
   font-weight: 600;
   color: var(--navy-dark);
@@ -77,6 +84,22 @@
 .ticker-prices__actions {
   text-align: right;
   white-space: nowrap;
+}
+
+/* .ticker-prices td already sets color: var(--text-primary), which has
+   higher specificity (class+element) than the global unscoped .is-positive/
+   .is-negative (single class) — these overrides have to match that
+   specificity to actually win. */
+.ticker-prices td.is-positive {
+  color: var(--green);
+}
+
+.ticker-prices td.is-negative {
+  color: var(--red);
+}
+
+.ticker-prices td.is-neutral {
+  color: #000;
 }
 
 .ticker-prices__target-cell {
