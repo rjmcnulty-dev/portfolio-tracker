@@ -402,6 +402,24 @@ function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
   )
 }
 
+// change/changePct are already computed over the currently selected `range`
+// (first vs. last close in that chart's series) — this just surfaces that
+// same figure as a clearly labeled stat instead of an unlabeled aside next
+// to the price.
+function NetGainBadge({ change, changePct, range }) {
+  if (change == null) return null
+  return (
+    <div className="watchlist-card__net-gain">
+      <span className="watchlist-card__net-gain-label">Net Gain/Loss ({range})</span>
+      <span className={`watchlist-card__net-gain-value ${change >= 0 ? 'is-positive' : 'is-negative'}`}>
+        {change >= 0 ? '+' : ''}
+        {formatCurrency(change)} ({changePct >= 0 ? '+' : ''}
+        {changePct.toFixed(2)}%)
+      </span>
+    </div>
+  )
+}
+
 function HeldBanner({ heldAccounts }) {
   if (!heldAccounts || heldAccounts.length === 0) return null
   return (
@@ -607,34 +625,26 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
             <span className="watchlist-card__ticker">{item.ticker}</span>
             {companyName && <span className="watchlist-card__company">{companyName}</span>}
           </div>
-          {latestPrice != null && (
-            <span className="watchlist-card__price">
-              {formatCurrency(latestPrice)}
-              {change != null && (
-                <span className={change >= 0 ? 'is-positive' : 'is-negative'}>
-                  {' '}
-                  {change >= 0 ? '+' : ''}
-                  {formatCurrency(change)} ({changePct.toFixed(2)}%)
-                </span>
-              )}
-            </span>
-          )}
+          {latestPrice != null && <span className="watchlist-card__price">{formatCurrency(latestPrice)}</span>}
         </div>
-        <div className="watchlist-card__header-actions">
-          <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
-          <button className="btn-link" onClick={() => setExpanded(true)}>
-            Expand
-          </button>
-          <button className="btn-link" onClick={() => onHide(item.ticker)}>
-            Hide
-          </button>
-          {onRemove && (
-            <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
-              Remove
+        <div className="watchlist-card__header-right">
+          <NetGainBadge change={change} changePct={changePct} range={range} />
+          <div className="watchlist-card__header-actions">
+            <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
+              {loading ? 'Refreshing…' : 'Refresh'}
             </button>
-          )}
+            <button className="btn-link" onClick={() => setExpanded(true)}>
+              Expand
+            </button>
+            <button className="btn-link" onClick={() => onHide(item.ticker)}>
+              Hide
+            </button>
+            {onRemove && (
+              <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
+                Remove
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -727,13 +737,16 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
                 <span className="watchlist-card__ticker">{item.ticker}</span>
                 {companyName && <span className="watchlist-card__company">{companyName}</span>}
               </div>
-              <div className="watchlist-card__header-actions">
-                <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
-                  {loading ? 'Refreshing…' : 'Refresh'}
-                </button>
-                <button className="btn-link" onClick={() => setExpanded(false)}>
-                  Close
-                </button>
+              <div className="watchlist-card__header-right">
+                <NetGainBadge change={change} changePct={changePct} range={range} />
+                <div className="watchlist-card__header-actions">
+                  <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
+                    {loading ? 'Refreshing…' : 'Refresh'}
+                  </button>
+                  <button className="btn-link" onClick={() => setExpanded(false)}>
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
 
