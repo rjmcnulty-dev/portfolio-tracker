@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useWatchlist } from '../hooks/useWatchlist'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
+import { useHeldAccountsByTicker } from '../hooks/useHeldAccountsByTicker'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
 import WatchlistFilterModal from '../components/WatchlistFilterModal'
 
 export default function StockWatchPage() {
   const { watchlist, loading, error, addTicker, updateNotes, removeTicker } = useWatchlist()
+  const { heldAccountsByTicker } = useHeldAccountsByTicker()
   const [newTicker, setNewTicker] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
@@ -142,6 +144,7 @@ export default function StockWatchPage() {
               onSaveNotes={updateNotes}
               syncSettings={syncMap.get(item.ticker)}
               subchartsBroadcast={subchartsBroadcast}
+              heldAccounts={[...(heldAccountsByTicker.get(item.ticker) ?? [])]}
             />
           ))}
         </div>

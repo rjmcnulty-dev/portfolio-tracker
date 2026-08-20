@@ -402,7 +402,21 @@ function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
   )
 }
 
-export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syncSettings, subchartsBroadcast }) {
+function HeldBanner({ heldAccounts }) {
+  if (!heldAccounts || heldAccounts.length === 0) return null
+  return (
+    <div className="watchlist-card__held-banner">
+      <span>Held:</span>
+      {heldAccounts.map((account) => (
+        <span key={account} className="account-badge">
+          {account}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syncSettings, subchartsBroadcast, heldAccounts }) {
   const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
@@ -586,6 +600,7 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
 
   return (
     <div className="watchlist-card">
+      <HeldBanner heldAccounts={heldAccounts} />
       <div className="watchlist-card__header">
         <div>
           <div className="watchlist-card__title-row">
@@ -615,9 +630,11 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
           <button className="btn-link" onClick={() => onHide(item.ticker)}>
             Hide
           </button>
-          <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
-            Remove
-          </button>
+          {onRemove && (
+            <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
+              Remove
+            </button>
+          )}
         </div>
       </div>
 
@@ -682,26 +699,29 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
         <span className="watchlist-card__earnings-value">{formatFloat(floatShares, sharesOutstanding)}</span>
       </div>
 
-      <div className="watchlist-card__notes">
-        <label>
-          Notes
-          <textarea
-            value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value)
-              setNotesDirty(true)
-            }}
-          />
-        </label>
-        {notesError && <p className="watchlist-card__error">{notesError}</p>}
-        <button className="btn btn--ghost" disabled={!notesDirty || savingNotes} onClick={handleSaveNotes}>
-          {savingNotes ? 'Saving…' : 'Save Notes'}
-        </button>
-      </div>
+      {onSaveNotes && (
+        <div className="watchlist-card__notes">
+          <label>
+            Notes
+            <textarea
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.target.value)
+                setNotesDirty(true)
+              }}
+            />
+          </label>
+          {notesError && <p className="watchlist-card__error">{notesError}</p>}
+          <button className="btn btn--ghost" disabled={!notesDirty || savingNotes} onClick={handleSaveNotes}>
+            {savingNotes ? 'Saving…' : 'Save Notes'}
+          </button>
+        </div>
+      )}
 
       {expanded && (
         <div className="modal-overlay" onClick={() => setExpanded(false)}>
           <div className="modal watchlist-modal" onClick={(event) => event.stopPropagation()}>
+            <HeldBanner heldAccounts={heldAccounts} />
             <div className="watchlist-modal__header">
               <div className="watchlist-card__title-row">
                 <span className="watchlist-card__ticker">{item.ticker}</span>

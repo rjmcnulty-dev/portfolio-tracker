@@ -1,0 +1,28 @@
+.portfolio-stocks-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #d3d9e0;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.portfolio-stocks-tabs__btn {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.portfolio-stocks-tabs__btn:hover {
+  color: var(--navy-dark);
+}
+
+.portfolio-stocks-tabs__btn.is-active {
+  color: var(--navy-dark);
+  border-bottom-color: var(--gold);
+}

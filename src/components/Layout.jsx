@@ -62,6 +62,9 @@ export default function Layout() {
           <NavLink to="/watch" className={linkClass}>
             Stock Watch
           </NavLink>
+          <NavLink to="/portfolio-stocks" className={linkClass}>
+            Portfolio Stocks
+          </NavLink>
           <NavLink to="/tax" className={linkClass}>
             Tax &amp; Roth
           </NavLink>

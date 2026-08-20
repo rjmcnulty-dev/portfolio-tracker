@@ -8,6 +8,20 @@
   gap: 14px;
 }
 
+.watchlist-card__held-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: var(--surface);
+  border-left: 3px solid var(--gold);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
 .watchlist-card__header {
   display: flex;
   justify-content: space-between;
