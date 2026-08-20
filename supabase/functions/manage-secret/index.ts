@@ -27,7 +27,7 @@ function json(body: unknown, status = 200) {
 
 // The only secrets this app currently has a use for — not an open key/value
 // store, so a typo in the client can't silently create a stray row.
-const ALLOWED_KEYS = new Set(["twelve_data_api_key", "finnhub_api_key"]);
+const ALLOWED_KEYS = new Set(["twelve_data_api_key", "finnhub_api_key", "anthropic_api_key"]);
 
 function previewOf(value: string): string {
   return value.length > 4 ? `••••${value.slice(-4)}` : "••••";

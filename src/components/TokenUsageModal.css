@@ -1,0 +1,32 @@
+.token-usage__section {
+  margin-top: 16px;
+}
+
+.token-usage__section-title {
+  font-size: 14px;
+  color: var(--navy-dark);
+  margin: 0 0 8px;
+}
+
+.token-usage__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.token-usage__table td {
+  padding: 4px 0;
+  color: var(--text-primary);
+  border-bottom: 1px solid #edf0f3;
+}
+
+.token-usage__table td.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-usage__cost {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}

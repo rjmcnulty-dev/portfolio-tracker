@@ -82,3 +82,12 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/reveal-secret/deno.json"
 entrypoint = "./functions/reveal-secret/index.ts"
+
+[functions.ai-companion]
+enabled = true
+# Same reasoning as manage-secret: every call here costs real money
+# (Anthropic API), so it requires a real logged-in session, not just the
+# anon key.
+verify_jwt = true
+import_map = "./functions/ai-companion/deno.json"
+entrypoint = "./functions/ai-companion/index.ts"

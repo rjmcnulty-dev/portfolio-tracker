@@ -5,6 +5,7 @@ import './AdminSecretsPage.css'
 const SECRETS = [
   { key: 'twelve_data_api_key', label: 'Twelve Data API Key' },
   { key: 'finnhub_api_key', label: 'Finnhub API Key' },
+  { key: 'anthropic_api_key', label: 'Anthropic API Key' },
 ]
 
 function SecretRow({ secretKey, label }) {

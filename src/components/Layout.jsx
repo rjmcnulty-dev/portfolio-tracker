@@ -18,6 +18,7 @@ const TOOL_LINKS = [
   { key: 'watch', to: '/watch', label: 'Stock Watch' },
   { key: 'portfolio-stocks', to: '/portfolio-stocks', label: 'Portfolio Stocks' },
   { key: 'tax', to: '/tax', label: 'Tax & Roth' },
+  { key: 'ai-companion', to: '/ai-companion', label: 'AI Companion' },
   { key: 'admin', to: '/admin', label: 'Admin' },
 ]
 const DEFAULT_TOOL_ORDER = TOOL_LINKS.map((t) => t.key)

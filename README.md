@@ -1207,6 +1207,29 @@ This protects **who can reach `/admin`'s controls** — it does not change what 
 can already do to the database directly (every other table is still `using (true)`, unchanged
 by this feature).
 
+### Password reset
+
+`/login` has a **Forgot password?** link — email + `supabase.auth.resetPasswordForEmail`, then
+follow the emailed link to set a new one.
+
+**The one non-obvious part**: Supabase's reset link redirects back to the app with an auth
+token embedded in the URL *hash* (`#access_token=...`) — but this app's router (`HashRouter`)
+also uses the URL hash for routing, so a route like `/#/reset-password` can't reliably match
+once Supabase appends its own token onto that same hash. Rather than fight that collision,
+`src/hooks/usePasswordRecovery.js` listens for Supabase's `PASSWORD_RECOVERY` auth event
+directly (fires correctly regardless of what the resulting URL looks like) and
+`src/App.jsx` swaps the entire app over to `src/pages/ResetPasswordPage.jsx` the instant it
+fires — no route match involved.
+
+**One-time setup**: Supabase only redirects to allow-listed URLs. Add your app's URL(s) —
+e.g. `http://localhost:5173/**` for local dev, plus your deployed URL if you have one — under
+Supabase Dashboard → **Authentication → URL Configuration → Redirect URLs**.
+
+**Login hint**: `/login` also shows an optional hint (the `login_hint` row in `app_config`,
+below) to jog your memory before you'd need a full reset. It's editable from `/admin`'s App
+Settings tab like any other config row — but unlike the rest of that table, it's rendered on
+a page that requires no login, so don't put anything in it that gives the password away.
+
 ### App settings (`app_config`)
 
 A curated set of business-logic constants — picked from a codebase audit for being either
@@ -1252,7 +1275,19 @@ insert into app_config (key, value, category, label, description) values
   ('holdings_page_size_options', '{"options":[25,50,100,"All"],"default":25}', 'Trade Log', 'Page Size Options',
     'Rows-per-page choices on the Trade Log table.'),
   ('tax_filing_statuses', '[{"value":"single","label":"Single"},{"value":"married_joint","label":"Married Filing Jointly"}]', 'Tax', 'Filing Statuses',
-    'Options on the Tax Headroom filing-status dropdown.')
+    'Options on the Tax Headroom filing-status dropdown.'),
+  ('login_hint', '""', 'Auth', 'Login Password Hint',
+    'Optional hint shown on the sign-in page to help you remember your password. Public/unauthenticated — visible to anyone who visits /login, so don''t put anything that gives the password away.')
+on conflict (key) do nothing;
+```
+
+**If you already ran the insert above before `login_hint` existed**, run this once to add the row
+(a no-op if you're setting this up fresh — the insert above already includes it):
+
+```sql
+insert into app_config (key, value, category, label, description) values
+  ('login_hint', '""', 'Auth', 'Login Password Hint',
+    'Optional hint shown on the sign-in page to help you remember your password. Public/unauthenticated — visible to anyone who visits /login, so don''t put anything that gives the password away.')
 on conflict (key) do nothing;
 ```
 
@@ -1376,6 +1411,98 @@ encrypts or decrypts. Ciphertext is stored as `base64(iv) + "." + base64(ciphert
 GitHub secret if either new secret is missing or nothing's been saved yet — same
 zero-downtime transition as the Edge Functions.
 
+## AI Companion
+
+A chat page (`/ai-companion`, gated behind the same login as `/admin` — see "Admin / Auth")
+that talks to Claude via the Anthropic API, with a snapshot of the current portfolio as
+context so it can actually answer questions about holdings/P&L/cash rather than a plain
+generic chatbot.
+
+**Setup**: get an API key from [console.anthropic.com](https://console.anthropic.com), then
+set it from `/admin`'s Secrets tab (`anthropic_api_key`, added to the same `ALLOWED_KEYS` set
+as the Twelve Data/Finnhub keys — see "Encrypted secrets" above; same encryption, same
+storage, same never-echoed-back guarantee).
+
+**Why this one requires login, unlike everything else in this app**: every other Edge
+Function here is free (or on a fixed-cost external API budget); this one is metered,
+pay-per-token, on your own Anthropic account. `supabase/functions/ai-companion/index.ts` uses
+`verify_jwt = true` plus the same explicit `auth.getUser()` check as `manage-secret` — a
+deliberate cost gate, not just an access-control one.
+
+**Portfolio context**: `src/lib/portfolioContext.js`'s `buildPortfolioContext()` turns the
+already-computed `usePortfolio('All')` values (KPIs, holdings, allocation, cash position —
+never raw trade rows, to keep token cost down) into a compact JSON snapshot.
+`AiCompanionPage.jsx` computes this **once**, the first time portfolio data finishes loading,
+and freezes it for the rest of the session — resending the exact same JSON on every turn
+matters for prompt caching (below), not just correctness. It's a point-in-time snapshot, not
+live data — the system prompt tells the model as much, so it caveats anything time-sensitive
+correctly instead of implying it's watching your accounts in real time.
+
+**Prompt caching**: every turn resends the whole growing conversation (standard multi-turn
+chat pattern), so caching compounds — `ai-companion` marks the system prompt, the portfolio
+context block, and the last message of each request with an `ephemeral` `cache_control`
+breakpoint. Each new turn's request repeats the previous turn's prefix verbatim before
+appending what's new, so Anthropic can serve that unchanged prefix from cache and only charges
+full price for the newly appended tokens. Anthropic requires a minimum prompt size (1024
+tokens for Sonnet) before caching actually activates — a short conversation with a small
+portfolio may not cross that threshold, which is expected, not a bug. The function returns
+Anthropic's `usage` block alongside each reply; `useAiCompanion.js` logs it to the browser
+console (`[ai-companion] usage`) so `cache_read_input_tokens` ticking up after the first
+couple of turns is easy to confirm.
+
+**Guardrails**: `MAX_MESSAGE_CHARS` (8000), `MAX_MESSAGES` (40, then the client needs a new
+conversation), and `MAX_CONTEXT_CHARS` (20000) all return a clean 400 rather than silently
+truncating — a stuck retry loop or a huge pasted block can't run up an unbounded bill on a
+single request.
+
+**Scoped out on purpose**: streaming responses (real complexity — SSE through an Edge
+Function — for mostly cosmetic benefit at single-user scale) and persisted conversation
+history (a new table, only worth it if chats need to survive a page refresh; currently
+in-memory only, reset by "New Conversation" or a reload).
+
+### Token Usage modal
+
+The page header's **Token Usage** button shows two breakdowns (input/output/cache-write/
+cache-read tokens, plus an estimated $ spend) — **This Session** (client-side running total,
+reset by "New Conversation" or a reload, same lifetime as the conversation itself) and
+**All Time** (summed from every call ever made, across every session/browser/device). Run
+once in the Supabase SQL editor:
+
+```sql
+create table if not exists ai_usage_log (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  input_tokens integer not null default 0,
+  output_tokens integer not null default 0,
+  cache_creation_input_tokens integer not null default 0,
+  cache_read_input_tokens integer not null default 0
+);
+alter table ai_usage_log enable row level security;
+create policy "Authenticated read on ai_usage_log" on ai_usage_log for select
+  using (auth.role() = 'authenticated');
+
+insert into app_config (key, value, category, label, description) values
+  ('ai_companion_pricing', '{"inputPerMTok":3,"outputPerMTok":15,"cacheWritePerMTok":3.75,"cacheReadPerMTok":0.3}', 'AI Companion', 'Token Pricing ($/million tokens)',
+    'Estimated cost rates for the Token Usage modal — update if Anthropic changes pricing or you switch models. Not billing-accurate, just an estimate from token counts.')
+on conflict (key) do nothing;
+```
+
+`ai-companion` inserts one row per successful reply via its existing service-role client
+(bypasses RLS, same as every other write in that function) — this is why the table has no
+insert policy at all; only that function ever writes to it. There's deliberately no anon
+read policy either, unlike `app_config` — spend data is scoped to the same login `/ai-companion`
+itself requires, not public. `src/hooks/useAiUsageTotal.js` fetches and sums every row
+client-side rather than relying on a SQL aggregate, since a personal single-user app's row
+count (one per message) stays small enough for years of daily use, and it sidesteps any
+question of whether PostgREST aggregates are enabled on this project. `src/lib/
+aiUsagePricing.js` holds the shared `estimateCost()`/`sumUsage()` used by both the session and
+all-time totals, reading rates from `ai_companion_pricing` (falling back to the same
+hardcoded values as the seed row above if that config row doesn't exist yet).
+
+**Not a substitute for the Anthropic console** — this is an estimate computed from token
+counts against rates you configure, not a read of your actual account billing. Good for
+tracking relative spend and catching a runaway conversation, not for reconciling an invoice.
+
 ## App structure
 
 ```
@@ -1383,8 +1510,13 @@ src/
   lib/
     supabase.js         # Supabase client init
     accounts.js         # slugify() for account name -> URL slug (no longer a static list)
+    portfolioContext.js # buildPortfolioContext() — compact snapshot sent to AI Companion, see "AI Companion"
+    aiUsagePricing.js   # estimateCost()/sumUsage() shared by session + all-time totals — see "Token Usage modal"
   hooks/
     useAccounts.js          # Fetch accounts; addAccount() — see "Accounts"
+    usePasswordRecovery.js  # Detects Supabase's PASSWORD_RECOVERY auth event — see "Password reset"
+    useAiCompanion.js       # Chat state + calls ai-companion Edge Function — see "AI Companion"
+    useAiUsageTotal.js      # All-time token usage, summed from ai_usage_log — see "Token Usage modal"
     useTrades.js         # Fetch/add/update/delete trades, optionally filtered by account
     useTickerPrices.js    # Latest price per ticker; updatePrice() for manual edits, refreshAll() calls the Edge Function
     useDeposits.js         # Fetch/add/update/delete deposits, optionally filtered by account
@@ -1416,6 +1548,7 @@ src/
     DepositSchedulesTable.jsx # Recurring schedules table (active/paused status)
     WatchlistCard.jsx       # Stock Watch card: range-toggle chart, next earnings, notes
     WatchlistFilterModal.jsx # Checkbox list to hide/show cards on the Stock Watch page
+    TokenUsageModal.jsx     # Session + all-time token usage/spend — see "Token Usage modal"
   pages/
     Dashboard.jsx          # All Accounts view
     AccountPage.jsx        # Single account view, resolved from the URL slug via accounts
@@ -1424,10 +1557,12 @@ src/
     PricesPage.jsx          # Manual price overrides (/prices)
     DepositsPage.jsx        # Deposit/withdrawal ledger + recurring schedules (/deposits)
     StockWatchPage.jsx      # Watchlist: add ticker, view chart/earnings/notes (/watch)
-    LoginPage.jsx            # Standalone (no sidebar) sign-in form — see "Admin / Auth"
+    LoginPage.jsx            # Standalone (no sidebar) sign-in form + forgot-password — see "Admin / Auth"
+    ResetPasswordPage.jsx    # Set-new-password form, shown on PASSWORD_RECOVERY — see "Password reset"
     AdminPage.jsx            # Login-gated app config (/admin) — see "Admin / Auth"
     AdminConfigPage.jsx      # App Settings tab: app_config rows grouped by category, shape-aware form editor
-    AdminSecretsPage.jsx     # Secrets tab: masked Twelve Data/Finnhub key entry — see "Encrypted secrets"
+    AdminSecretsPage.jsx     # Secrets tab: masked API key entry (Twelve Data/Finnhub/Anthropic) — see "Encrypted secrets"
+    AiCompanionPage.jsx      # Chat with Claude, portfolio-aware (/ai-companion) — see "AI Companion"
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
@@ -1446,6 +1581,7 @@ supabase/
     watchlist-quote/         # Live chart + earnings lookup for Stock Watch (see "Stock Watch")
     manage-secret/            # Save/status for encrypted secrets, called from /admin — see "Encrypted secrets"
     reveal-secret/             # Decrypts a secret for the GitHub Actions scripts — see "Encrypted secrets"
+    ai-companion/              # Chat proxy to the Anthropic API, portfolio-aware — see "AI Companion"
 ```
 
 ## Deployment

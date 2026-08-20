@@ -34,3 +34,10 @@
   font-size: 13px;
   margin: 0;
 }
+
+.login-page__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+  margin: 0;
+}
