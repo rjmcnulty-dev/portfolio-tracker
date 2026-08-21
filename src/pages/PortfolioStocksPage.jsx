@@ -4,7 +4,7 @@ import { usePortfolio } from '../hooks/usePortfolio'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
-import WatchlistFilterModal from '../components/WatchlistFilterModal'
+import TickerChecklist from '../components/TickerChecklist'
 import '../components/PortfolioStocksTabs.css'
 
 // Tabs are just `accounts` plus a leading "All" pseudo-tab, so they always
@@ -67,7 +67,6 @@ export default function PortfolioStocksPage() {
 function PortfolioStocksTab({ accountLabel }) {
   const { holdings, loading, error } = usePortfolio(accountLabel)
   const [showSyncModal, setShowSyncModal] = useState(false)
-  const [showFilterModal, setShowFilterModal] = useState(false)
   const [hiddenTickers, setHiddenTickers] = useState(new Set())
   const [syncMap, setSyncMap] = useState(new Map())
   const [subchartsBroadcast, setSubchartsBroadcast] = useState({ version: 0, visible: true })
@@ -92,6 +91,15 @@ function PortfolioStocksTab({ accountLabel }) {
     setHiddenTickers((prev) => new Set(prev).add(ticker))
   }
 
+  function handleToggleTicker(ticker) {
+    setHiddenTickers((prev) => {
+      const next = new Set(prev)
+      if (next.has(ticker)) next.delete(ticker)
+      else next.add(ticker)
+      return next
+    })
+  }
+
   function handleApplySync(settings) {
     setSyncMap((prev) => {
       const next = new Map(prev)
@@ -107,9 +115,6 @@ function PortfolioStocksTab({ accountLabel }) {
     <>
       {items.length > 0 && (
         <div className="filters">
-          <button className="btn btn--ghost" onClick={() => setShowFilterModal(true)}>
-            Filter{hiddenTickers.size > 0 ? ` (${hiddenTickers.size} hidden)` : ''}
-          </button>
           <button className="btn btn--ghost" onClick={handleToggleAllSubcharts}>
             {subchartsBroadcast.visible ? 'Hide All Subcharts' : 'Show All Subcharts'}
           </button>
@@ -131,33 +136,36 @@ function PortfolioStocksTab({ accountLabel }) {
         <p className="page__loading">Loading holdings…</p>
       ) : items.length === 0 ? (
         <p className="page__loading">No holdings in {accountLabel === 'All' ? 'any account' : accountLabel}.</p>
-      ) : visibleItems.length === 0 ? (
-        <p className="page__loading">
-          Every card is hidden — <button className="btn-link" onClick={() => setShowFilterModal(true)}>open Filter</button> to show some.
-        </p>
       ) : (
-        <div className="chart-grid">
-          {visibleItems.map((item) => (
-            <WatchlistCard
-              key={item.id}
-              item={item}
-              onHide={handleHide}
-              syncSettings={syncMap.get(item.ticker)}
-              subchartsBroadcast={subchartsBroadcast}
-            />
-          ))}
+        <div className="page__split">
+          <TickerChecklist
+            items={items}
+            hiddenTickers={hiddenTickers}
+            onToggle={handleToggleTicker}
+            onSelectAll={() => setHiddenTickers(new Set())}
+            onDeselectAll={() => setHiddenTickers(new Set(items.map((item) => item.ticker)))}
+          />
+          <div className="page__split-main">
+            {visibleItems.length === 0 ? (
+              <p className="page__loading">Every card is hidden — check a ticker on the left to show it.</p>
+            ) : (
+              <div className="chart-grid">
+                {visibleItems.map((item) => (
+                  <WatchlistCard
+                    key={item.id}
+                    item={item}
+                    onHide={handleHide}
+                    syncSettings={syncMap.get(item.ticker)}
+                    subchartsBroadcast={subchartsBroadcast}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {showSyncModal && <WatchlistSyncModal onApply={handleApplySync} onClose={() => setShowSyncModal(false)} />}
-      {showFilterModal && (
-        <WatchlistFilterModal
-          watchlist={items}
-          hiddenTickers={hiddenTickers}
-          onApply={setHiddenTickers}
-          onClose={() => setShowFilterModal(false)}
-        />
-      )}
     </>
   )
 }

@@ -320,6 +320,19 @@ h3 {
   color: var(--red);
 }
 
+/* Left ticker-checklist + right content split (Stock Watch, Portfolio Stocks) */
+
+.page__split {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.page__split-main {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Charts */
 
 .chart-grid {

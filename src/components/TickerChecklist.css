@@ -1,0 +1,70 @@
+.ticker-checklist {
+  flex: 0 0 110px;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 10px 8px;
+  align-self: flex-start;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.ticker-checklist__title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--navy-dark);
+  margin-bottom: 6px;
+}
+
+.ticker-checklist__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.ticker-checklist__list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ticker-checklist__item label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ticker-checklist__item input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 1px solid #d3d9e0;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.ticker-checklist__summary {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+}
