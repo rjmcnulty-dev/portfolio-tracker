@@ -6,14 +6,14 @@ import TokenUsageModal from '../components/TokenUsageModal'
 import './AiCompanionPage.css'
 
 export default function AiCompanionPage() {
-  const { kpis, holdings, allocation, cashPosition, loading: portfolioLoading } = usePortfolio('All')
+  const { kpis, holdings, allocation, cashPosition, trades, loading: portfolioLoading } = usePortfolio('All')
   // Frozen the first time portfolio data finishes loading, not recomputed on
   // every render — see useAiCompanion/portfolioContext.js for why a stable
   // JSON string across the whole conversation matters for prompt caching,
   // not just correctness.
   const portfolioContextRef = useRef(null)
   if (!portfolioLoading && !portfolioContextRef.current) {
-    portfolioContextRef.current = buildPortfolioContext({ kpis, holdings, allocation, cashPosition })
+    portfolioContextRef.current = buildPortfolioContext({ kpis, holdings, allocation, cashPosition, trades })
   }
 
   const { messages, sending, error, sendMessage, clearConversation, sessionUsage } = useAiCompanion(
@@ -40,8 +40,8 @@ export default function AiCompanionPage() {
         <div>
           <h1>AI Companion</h1>
           <p className="page__subtitle">
-            Chat with Claude — it has a snapshot of your current holdings, P&amp;L, and cash position from when this
-            page loaded.
+            Chat with Claude — it has a snapshot of your current holdings, P&amp;L, cash position, and trades from
+            the last 60 days, as of when this page loaded.
           </p>
         </div>
         <div className="filters">

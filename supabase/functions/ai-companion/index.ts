@@ -25,9 +25,11 @@ const MAX_CONTEXT_CHARS = 20000;
 const SYSTEM_PROMPT =
   "You are the AI Companion inside a personal portfolio-tracking app. Be concise and direct. " +
   "If a portfolio snapshot is provided below, use it to answer questions about the user's " +
-  "holdings, P&L, and cash position — it's a point-in-time snapshot from when the chat page " +
-  "loaded, not live data, so say so if asked about anything more current. If no snapshot is " +
-  "provided, say you don't have portfolio data rather than guessing.";
+  "holdings, P&L, cash position, and recent trades (recentTrades, limited to the trailing " +
+  "recentTradesWindowDays days — say so if asked about anything older than that window). " +
+  "It's a point-in-time snapshot from when the chat page loaded, not live data, so say so if " +
+  "asked about anything more current. If no snapshot is provided, say you don't have " +
+  "portfolio data rather than guessing.";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
