@@ -18,7 +18,7 @@ export function useAiUsageTotal() {
       setLoading(true)
       const { data, error: fetchError } = await supabase
         .from('ai_usage_log')
-        .select('input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens')
+        .select('input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, web_search_requests')
       if (ignore) return
 
       if (fetchError) {

@@ -4,9 +4,16 @@ import { estimateCost } from '../lib/aiUsagePricing'
 import './TokenUsageModal.css'
 
 // $/million-token rates matching Anthropic's published Sonnet pricing as of
-// when this was built — editable from /admin -> App Settings -> AI
+// when this was built, plus the flat per-search web search fee (billed
+// separately from tokens) — editable from /admin -> App Settings -> AI
 // Companion (ai_companion_pricing) if rates change or the model does.
-const DEFAULT_PRICING = { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 }
+const DEFAULT_PRICING = {
+  inputPerMTok: 3,
+  outputPerMTok: 15,
+  cacheWritePerMTok: 3.75,
+  cacheReadPerMTok: 0.3,
+  webSearchPerSearch: 0.01,
+}
 
 function formatTokens(value) {
   return (value ?? 0).toLocaleString('en-US')
@@ -44,6 +51,10 @@ function UsageSection({ title, usage, pricing, loading, error }) {
               <tr>
                 <td>Cache read tokens</td>
                 <td className="is-numeric">{formatTokens(usage.cache_read_input_tokens)}</td>
+              </tr>
+              <tr>
+                <td>Web searches</td>
+                <td className="is-numeric">{formatTokens(usage.web_search_requests)}</td>
               </tr>
             </tbody>
           </table>

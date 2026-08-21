@@ -21,6 +21,11 @@ const MAX_MESSAGES = 40;
 // not raw user input, but still bounded — a runaway holdings list shouldn't
 // be able to blow up the request either.
 const MAX_CONTEXT_CHARS = 20000;
+// Anthropic's web search is a server-side tool — Claude decides on its own
+// whether/how many times to search within a single reply, billed per search
+// (separate from token cost, see aiUsagePricing.js). This bounds how many
+// searches one reply can rack up.
+const MAX_WEB_SEARCHES = 5;
 
 const SYSTEM_PROMPT =
   "You are the AI Companion inside a personal portfolio-tracking app. Be concise and direct. " +
@@ -29,7 +34,10 @@ const SYSTEM_PROMPT =
   "recentTradesWindowDays days — say so if asked about anything older than that window). " +
   "It's a point-in-time snapshot from when the chat page loaded, not live data, so say so if " +
   "asked about anything more current. If no snapshot is provided, say you don't have " +
-  "portfolio data rather than guessing.";
+  "portfolio data rather than guessing. You also have a web search tool — use it for anything " +
+  "needing current information (market news, a stock's latest price, general facts) that isn't " +
+  "in the portfolio snapshot. Never use it to guess at the user's own holdings or trades — " +
+  "that only ever comes from the snapshot.";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -133,6 +141,7 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: systemBlocks,
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: MAX_WEB_SEARCHES }],
       messages: messages.map((m, i) => ({
         role: m.role,
         content: [
@@ -152,7 +161,15 @@ Deno.serve(async (req) => {
     return json({ error: message }, 502);
   }
 
-  const reply = anthropicBody.content?.find((block: { type: string }) => block.type === "text")?.text;
+  // A web-search turn's content array interleaves server_tool_use/
+  // web_search_tool_result blocks with one or more text blocks (e.g. a
+  // short "searching for..." aside, then the real answer after the
+  // results) — .find() would silently grab just the first, often-empty
+  // one, so every text block gets joined instead.
+  const reply = anthropicBody.content
+    ?.filter((block: { type: string }) => block.type === "text")
+    .map((block: { text: string }) => block.text)
+    .join("\n\n");
   if (!reply) {
     return json({ error: "Anthropic returned no text content" }, 502);
   }
@@ -168,6 +185,7 @@ Deno.serve(async (req) => {
       output_tokens: usage.output_tokens ?? 0,
       cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
       cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+      web_search_requests: usage.server_tool_use?.web_search_requests ?? 0,
     });
     if (logError) console.error("ai_usage_log insert failed:", logError.message);
   }

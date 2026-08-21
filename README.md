@@ -1475,16 +1475,25 @@ create table if not exists ai_usage_log (
   input_tokens integer not null default 0,
   output_tokens integer not null default 0,
   cache_creation_input_tokens integer not null default 0,
-  cache_read_input_tokens integer not null default 0
+  cache_read_input_tokens integer not null default 0,
+  web_search_requests integer not null default 0
 );
 alter table ai_usage_log enable row level security;
 create policy "Authenticated read on ai_usage_log" on ai_usage_log for select
   using (auth.role() = 'authenticated');
 
 insert into app_config (key, value, category, label, description) values
-  ('ai_companion_pricing', '{"inputPerMTok":3,"outputPerMTok":15,"cacheWritePerMTok":3.75,"cacheReadPerMTok":0.3}', 'AI Companion', 'Token Pricing ($/million tokens)',
+  ('ai_companion_pricing', '{"inputPerMTok":3,"outputPerMTok":15,"cacheWritePerMTok":3.75,"cacheReadPerMTok":0.3,"webSearchPerSearch":0.01}', 'AI Companion', 'Token Pricing ($/million tokens)',
     'Estimated cost rates for the Token Usage modal — update if Anthropic changes pricing or you switch models. Not billing-accurate, just an estimate from token counts.')
 on conflict (key) do nothing;
+```
+
+**If you already ran the block above before `web_search_requests`/`webSearchPerSearch` existed**,
+run this once (a no-op if you're setting this up fresh):
+
+```sql
+alter table ai_usage_log add column if not exists web_search_requests integer not null default 0;
+update app_config set value = value || '{"webSearchPerSearch":0.01}'::jsonb where key = 'ai_companion_pricing';
 ```
 
 `ai-companion` inserts one row per successful reply via its existing service-role client
@@ -1502,6 +1511,29 @@ hardcoded values as the seed row above if that config row doesn't exist yet).
 **Not a substitute for the Anthropic console** — this is an estimate computed from token
 counts against rates you configure, not a read of your actual account billing. Good for
 tracking relative spend and catching a runaway conversation, not for reconciling an invoice.
+
+### Web search
+
+`ai-companion` passes Anthropic's `web_search_20250305` server-side tool on every request
+(`max_uses: 5` per reply — a constant in the function, same level as `MODEL`/`MAX_TOKENS`
+above it, not an `app_config` row, since this file already hardcodes its own tunables rather
+than pulling them from config). Claude decides on its own whether a question needs a search —
+the system prompt tells it to use the tool for anything current (market news, a stock's latest
+price, general facts) that isn't in the portfolio snapshot, and to never use it to guess at the
+user's own holdings or trades, which only ever come from the snapshot.
+
+This is a fully server-side tool: Anthropic runs the search and continues generating in the
+same request/response, so no client-side tool-execution loop was needed here. The one code
+change this required beyond adding the `tools` array: a web-search reply's `content` array
+interleaves `server_tool_use`/`web_search_tool_result` blocks with one or more `text` blocks
+(e.g. a short "searching for..." aside before the real answer) — the reply extraction switched
+from grabbing the first text block to joining all of them, so the substantive answer after a
+search isn't silently dropped.
+
+**Billed separately from tokens** — $10 per 1,000 searches as of when this was built
+(`webSearchPerSearch` in `ai_companion_pricing`, see "Token Usage modal" above), which is why
+that config row and the `ai_usage_log` table both have a `web_search_requests`/
+`webSearchPerSearch` field alongside the token-based ones.
 
 ## App structure
 
