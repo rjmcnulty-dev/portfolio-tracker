@@ -27,6 +27,14 @@
   top: 0;
 }
 
+.holdings-table th .column-hint {
+  display: block;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--text-muted-on-dark);
+}
+
 .holdings-table th.is-numeric {
   text-align: right;
 }

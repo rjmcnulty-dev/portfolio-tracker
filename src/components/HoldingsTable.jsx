@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
+import TickerLink from './TickerLink'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './HoldingsTable.css'
 
@@ -192,6 +193,7 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
               {columns.map((col) => (
                 <th key={col.key} onClick={() => handleSort(col.key)} className={col.numeric ? 'is-numeric' : ''}>
                   {col.label}
+                  {col.key === 'ticker' && <span className="column-hint">Click to view charts</span>}
                   {sortKey === col.key && <span className="sort-arrow">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
                 </th>
               ))}
@@ -202,6 +204,13 @@ export default function HoldingsTable({ trades, onEdit, onDelete }) {
             {paginated.map((trade) => (
               <tr key={trade.id}>
                 {columns.map((col) => {
+                  if (col.key === 'ticker') {
+                    return (
+                      <td key={col.key}>
+                        <TickerLink ticker={trade.ticker} />
+                      </td>
+                    )
+                  }
                   if (col.key === 'wash_sale_risk') {
                     return (
                       <td key={col.key}>

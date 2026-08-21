@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import TickerLink from './TickerLink'
 import './HoldingsSummaryTable.css'
 
 const COLUMNS = [
@@ -75,6 +76,7 @@ export default function HoldingsSummaryTable({ holdings }) {
             {COLUMNS.map((col) => (
               <th key={col.key} onClick={() => handleSort(col.key)} className={col.numeric ? 'is-numeric' : ''}>
                 {col.label}
+                {col.key === 'ticker' && <span className="column-hint">Click to view charts</span>}
                 {sortKey === col.key && <span className="sort-arrow">{sortDir === 'asc' ? ' ▲' : ' ▼'}</span>}
               </th>
             ))}
@@ -83,7 +85,9 @@ export default function HoldingsSummaryTable({ holdings }) {
         <tbody>
           {sorted.map((holding) => (
             <tr key={holding.ticker}>
-              <td className="holdings-summary__ticker">{holding.ticker}</td>
+              <td>
+                <TickerLink ticker={holding.ticker} className="holdings-summary__ticker" />
+              </td>
               <td className="is-numeric">{formatQuantity(holding.quantity)}</td>
               <td className="is-numeric">{formatCurrency(holding.avgCost)}</td>
               <td className="is-numeric">{formatCurrency(holding.currentPrice)}</td>

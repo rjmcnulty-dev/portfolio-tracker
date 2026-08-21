@@ -434,7 +434,22 @@ function HeldBanner({ heldAccounts }) {
   )
 }
 
-export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syncSettings, subchartsBroadcast, heldAccounts }) {
+// modalOnly (used by TickerLink, e.g. a ticker cell on the Account pages'
+// tables) skips the compact card entirely and renders straight into the
+// expanded modal, already open — "Close" then calls the passed onClose
+// (unmounts this instance) instead of collapsing back to a compact view
+// that was never rendered.
+export default function WatchlistCard({
+  item,
+  onRemove,
+  onHide,
+  onSaveNotes,
+  syncSettings,
+  subchartsBroadcast,
+  heldAccounts,
+  modalOnly,
+  onClose,
+}) {
   const maPeriods = useConfigValue('moving_average_periods', DEFAULT_MA_PERIODS)
   const srTuning = useConfigValue('support_resistance_tuning', DEFAULT_SR_TUNING)
   const stochasticTuning = useConfigValue('stochastic_tuning', DEFAULT_STOCHASTIC_TUNING)
@@ -453,7 +468,7 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
   const [showEarnings, setShowEarnings] = useState(true)
   const [showStochastic, setShowStochastic] = useState(true)
   const [showOBV, setShowOBV] = useState(true)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(Boolean(modalOnly))
   // config loads asynchronously, so `srTuning.maxLevelsDefault` is still the
   // hardcoded fallback at the moment the useState above reads it — this
   // re-applies the real default once app_config arrives, but only until the
@@ -550,6 +565,11 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
     [series, sma20, sma50, sma200, stochastic, obv, obvTrend, obvEma],
   )
 
+  function closeExpanded() {
+    if (modalOnly) onClose?.()
+    else setExpanded(false)
+  }
+
   function handleLevelCountChange(n) {
     levelCountTouched.current = true
     setLevelCount(n)
@@ -617,119 +637,125 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
   }
 
   return (
-    <div className="watchlist-card">
-      <HeldBanner heldAccounts={heldAccounts} />
-      <div className="watchlist-card__header">
-        <div>
-          <div className="watchlist-card__title-row">
-            <span className="watchlist-card__ticker">{item.ticker}</span>
-            {companyName && <span className="watchlist-card__company">{companyName}</span>}
+    <>
+      {!modalOnly && (
+        <div className="watchlist-card">
+          <HeldBanner heldAccounts={heldAccounts} />
+          <div className="watchlist-card__header">
+            <div>
+              <div className="watchlist-card__title-row">
+                <span className="watchlist-card__ticker">{item.ticker}</span>
+                {companyName && <span className="watchlist-card__company">{companyName}</span>}
+              </div>
+              {latestPrice != null && <span className="watchlist-card__price">{formatCurrency(latestPrice)}</span>}
+            </div>
+            <div className="watchlist-card__header-right">
+              <NetGainBadge change={change} changePct={changePct} range={range} />
+              <div className="watchlist-card__header-actions">
+                <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
+                  {loading ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <button className="btn-link" onClick={() => setExpanded(true)}>
+                  Expand
+                </button>
+                <button className="btn-link" onClick={() => onHide(item.ticker)}>
+                  Hide
+                </button>
+                {onRemove && (
+                  <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-          {latestPrice != null && <span className="watchlist-card__price">{formatCurrency(latestPrice)}</span>}
-        </div>
-        <div className="watchlist-card__header-right">
-          <NetGainBadge change={change} changePct={changePct} range={range} />
-          <div className="watchlist-card__header-actions">
-            <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
-              {loading ? 'Refreshing…' : 'Refresh'}
-            </button>
-            <button className="btn-link" onClick={() => setExpanded(true)}>
-              Expand
-            </button>
-            <button className="btn-link" onClick={() => onHide(item.ticker)}>
-              Hide
-            </button>
-            {onRemove && (
-              <button className="btn-link btn-link--danger" onClick={() => setConfirmingRemove(true)}>
-                Remove
+
+          <ChartControls
+            range={range}
+            setRange={setRange}
+            indicators={indicatorToggles}
+            levelCount={levelCount}
+            setLevelCount={handleLevelCountChange}
+            showLevels={showLevels}
+          />
+
+          {error && <p className="watchlist-card__error">{error}</p>}
+          {loading ? (
+            <p className="watchlist-card__loading">Loading chart…</p>
+          ) : (
+            <>
+              <PriceChart {...chartProps} height={240} />
+              {showStochastic && stochastic.k.length > 0 && (
+                <>
+                  <span className="watchlist-card__stochastic-label">
+                    Stochastic ({stochasticTuning.kPeriod}, {stochasticTuning.kSmoothing}, {stochasticTuning.dPeriod})
+                  </span>
+                  <StochasticChart
+                    chartData={chartData}
+                    range={range}
+                    overbought={stochasticTuning.overbought}
+                    oversold={stochasticTuning.oversold}
+                    height={100}
+                  />
+                </>
+              )}
+              {showOBV && obv.length > 0 && (
+                <>
+                  <span className="watchlist-card__stochastic-label">
+                    On Balance Volume (Trend: {obvTuning.trendPeriod}, EMA: {obvEmaPeriod})
+                  </span>
+                  <ObvChart
+                    chartData={chartData}
+                    range={range}
+                    trendPeriod={obvTuning.trendPeriod}
+                    emaPeriod={obvEmaPeriod}
+                    height={100}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          <div className="watchlist-card__earnings">
+            <span className="watchlist-card__earnings-label">Next Earnings</span>
+            <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
+          </div>
+
+          <div className="watchlist-card__earnings">
+            <span className="watchlist-card__earnings-label">Recent Earnings</span>
+            <span className="watchlist-card__earnings-value watchlist-card__earnings-value--list">
+              {formatEarningsList(recentEarningsDates)}
+            </span>
+          </div>
+
+          <div className="watchlist-card__earnings">
+            <span className="watchlist-card__earnings-label">Float</span>
+            <span className="watchlist-card__earnings-value">{formatFloat(floatShares, sharesOutstanding)}</span>
+          </div>
+
+          {onSaveNotes && (
+            <div className="watchlist-card__notes">
+              <label>
+                Notes
+                <textarea
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value)
+                    setNotesDirty(true)
+                  }}
+                />
+              </label>
+              {notesError && <p className="watchlist-card__error">{notesError}</p>}
+              <button className="btn btn--ghost" disabled={!notesDirty || savingNotes} onClick={handleSaveNotes}>
+                {savingNotes ? 'Saving…' : 'Save Notes'}
               </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <ChartControls
-        range={range}
-        setRange={setRange}
-        indicators={indicatorToggles}
-        levelCount={levelCount}
-        setLevelCount={handleLevelCountChange}
-        showLevels={showLevels}
-      />
-
-      {error && <p className="watchlist-card__error">{error}</p>}
-      {loading ? (
-        <p className="watchlist-card__loading">Loading chart…</p>
-      ) : (
-        <>
-          <PriceChart {...chartProps} height={240} />
-          {showStochastic && stochastic.k.length > 0 && (
-            <>
-              <span className="watchlist-card__stochastic-label">
-                Stochastic ({stochasticTuning.kPeriod}, {stochasticTuning.kSmoothing}, {stochasticTuning.dPeriod})
-              </span>
-              <StochasticChart
-                chartData={chartData}
-                range={range}
-                overbought={stochasticTuning.overbought}
-                oversold={stochasticTuning.oversold}
-                height={100}
-              />
-            </>
+            </div>
           )}
-          {showOBV && obv.length > 0 && (
-            <>
-              <span className="watchlist-card__stochastic-label">
-                On Balance Volume (Trend: {obvTuning.trendPeriod}, EMA: {obvEmaPeriod})
-              </span>
-              <ObvChart
-                chartData={chartData}
-                range={range}
-                trendPeriod={obvTuning.trendPeriod}
-                emaPeriod={obvEmaPeriod}
-                height={100}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      <div className="watchlist-card__earnings">
-        <span className="watchlist-card__earnings-label">Next Earnings</span>
-        <span className="watchlist-card__earnings-value">{formatEarningsDate(nextEarningsDate)}</span>
-      </div>
-
-      <div className="watchlist-card__earnings">
-        <span className="watchlist-card__earnings-label">Recent Earnings</span>
-        <span className="watchlist-card__earnings-value watchlist-card__earnings-value--list">{formatEarningsList(recentEarningsDates)}</span>
-      </div>
-
-      <div className="watchlist-card__earnings">
-        <span className="watchlist-card__earnings-label">Float</span>
-        <span className="watchlist-card__earnings-value">{formatFloat(floatShares, sharesOutstanding)}</span>
-      </div>
-
-      {onSaveNotes && (
-        <div className="watchlist-card__notes">
-          <label>
-            Notes
-            <textarea
-              value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value)
-                setNotesDirty(true)
-              }}
-            />
-          </label>
-          {notesError && <p className="watchlist-card__error">{notesError}</p>}
-          <button className="btn btn--ghost" disabled={!notesDirty || savingNotes} onClick={handleSaveNotes}>
-            {savingNotes ? 'Saving…' : 'Save Notes'}
-          </button>
         </div>
       )}
 
       {expanded && (
-        <div className="modal-overlay" onClick={() => setExpanded(false)}>
+        <div className="modal-overlay" onClick={closeExpanded}>
           <div className="modal watchlist-modal" onClick={(event) => event.stopPropagation()}>
             <HeldBanner heldAccounts={heldAccounts} />
             <div className="watchlist-modal__header">
@@ -743,7 +769,7 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
                   <button className="btn btn--ghost watchlist-card__refresh-btn" disabled={loading} onClick={refresh}>
                     {loading ? 'Refreshing…' : 'Refresh'}
                   </button>
-                  <button className="btn-link" onClick={() => setExpanded(false)}>
+                  <button className="btn-link" onClick={closeExpanded}>
                     Close
                   </button>
                 </div>
@@ -826,6 +852,6 @@ export default function WatchlistCard({ item, onRemove, onHide, onSaveNotes, syn
           }}
         />
       )}
-    </div>
+    </>
   )
 }

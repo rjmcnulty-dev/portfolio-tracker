@@ -25,6 +25,14 @@
   user-select: none;
 }
 
+.holdings-summary th .column-hint {
+  display: block;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--text-muted-on-dark);
+}
+
 .holdings-summary th.is-numeric {
   text-align: right;
 }
