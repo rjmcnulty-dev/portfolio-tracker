@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useTrades } from '../hooks/useTrades'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import { usePriceTargets } from '../hooks/usePriceTargets'
@@ -20,6 +19,12 @@ function formatPercent(value) {
   return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`
 }
 
+function formatQuantity(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('en-US', { maximumFractionDigits: 6 })
+}
+
 function pnlClass(value) {
   if (value > 0) return 'is-positive'
   if (value < 0) return 'is-negative'
@@ -35,11 +40,15 @@ function formatTimestamp(iso) {
 }
 
 export default function TickerPrices() {
-  const { trades, loading: tradesLoading } = useTrades('All')
-  const { holdings, pnlByTicker } = usePortfolio('All')
+  const { accounts } = useAccounts()
+  // Drives trades/holdings/pnlByTicker for the whole page — same "All" vs.
+  // one-account scoping usePortfolio already supports everywhere else
+  // (AccountPage, Portfolio Stocks), so filtering this page by account is
+  // just passing a different value through, not new fetch/aggregation logic.
+  const [selectedAccount, setSelectedAccount] = useState('All')
+  const { trades, loading: tradesLoading, holdings, pnlByTicker } = usePortfolio(selectedAccount)
   const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
   const { targets, updateTarget } = usePriceTargets()
-  const { accounts } = useAccounts()
 
   // holdings only includes tickers with an open (remaining_quantity > 0)
   // position — a fully-closed ticker still shows up in `tickers` below (it
@@ -87,15 +96,20 @@ export default function TickerPrices() {
   )
   const companyNames = useCompanyNames(tickers)
 
-  // Which accounts currently hold each ticker — same convention as holdings
-  // elsewhere in the app: an open position is a BUY row, no lot-matching
-  // against SELLs.
-  const heldByTickerAccount = useMemo(() => {
+  // Shares currently held per (ticker, account) — sum of remaining_quantity
+  // across that account's open BUY lots, same "open position" definition
+  // used everywhere else in the app. When selectedAccount isn't 'All',
+  // `trades` is already scoped to just that account, so every other
+  // account's entry here is naturally absent (renders blank).
+  const heldQtyByTickerAccount = useMemo(() => {
     const map = new Map()
     for (const trade of trades) {
       if (!isBuyTrade(trade.trade_type)) continue
-      if (!map.has(trade.ticker)) map.set(trade.ticker, new Set())
-      map.get(trade.ticker).add(trade.account)
+      const qty = Number(trade.remaining_quantity) || 0
+      if (qty <= 0) continue
+      if (!map.has(trade.ticker)) map.set(trade.ticker, new Map())
+      const byAccount = map.get(trade.ticker)
+      byAccount.set(trade.account, (byAccount.get(trade.account) || 0) + qty)
     }
     return map
   }, [trades])
@@ -196,155 +210,191 @@ export default function TickerPrices() {
     }
   }
 
-  if (tradesLoading || pricesLoading) return <div className="ticker-prices__empty">Loading prices…</div>
-  if (error) return <div className="ticker-prices__empty">Error: {error}</div>
-  if (!tickers.length) return <div className="ticker-prices__empty">No tickers yet — add a trade first.</div>
-
   return (
     <div className="ticker-prices-wrap">
-      <div className="ticker-prices__toolbar">
-        <span className="ticker-prices__last-refreshed">Last refreshed: {formatTimestamp(lastRefreshed)}</span>
-        <button className="btn btn--primary" disabled={refreshing} onClick={handleRefreshAll}>
-          {refreshing ? 'Updating…' : 'Update All Prices'}
+      <div className="ticker-prices__account-filter">
+        <button
+          type="button"
+          className={`ticker-prices__account-btn ${selectedAccount === 'All' ? 'is-active' : ''}`}
+          onClick={() => setSelectedAccount('All')}
+        >
+          All
         </button>
+        {accounts.map((account) => (
+          <button
+            type="button"
+            key={account.id}
+            className={`ticker-prices__account-btn ${selectedAccount === account.name ? 'is-active' : ''}`}
+            onClick={() => setSelectedAccount(account.name)}
+          >
+            {account.name}
+          </button>
+        ))}
       </div>
-      {refreshError && <p className="ticker-prices__error">{refreshError}</p>}
-      {refreshMessage && !refreshError && <p className="ticker-prices__message success-message">{refreshMessage}</p>}
-      <table className="ticker-prices">
-        <thead>
-          <tr>
-            <th>Ticker</th>
-            {accounts.map((account) => (
-              <th key={account.id} className="is-held-col">
-                {account.name}
-              </th>
-            ))}
-            <th className="is-numeric">Current Price</th>
-            <th>As Of</th>
-            <th className="is-numeric">Open Gain/Loss</th>
-            <th className="is-numeric" title="Realized + Unrealized P/L across this ticker's full trade history">
-              Total P/L
-            </th>
-            <th className="is-numeric">Price Target</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {tickers.map((ticker) => {
-            const row = prices[ticker]
-            const isEditing = editingTicker === ticker
-            const targetRow = targets[ticker]
-            const isEditingTarget = editingTargetTicker === ticker
-            const holding = holdingByTicker.get(ticker)
-            const totalPnl = totalPnlByTicker.get(ticker)
-            return (
-              <tr key={ticker}>
-                <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
-                  {ticker}
-                </td>
-                {accounts.map((account) => {
-                  const isHeld = heldByTickerAccount.get(ticker)?.has(account.name)
-                  return (
-                    <td key={account.id} className="is-held-col">
-                      {isHeld && <span className="held-dot" title={`Held in ${account.name}`} />}
-                    </td>
-                  )
-                })}
-                <td className="is-numeric">
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      step="any"
-                      autoFocus
-                      value={draftPrice}
-                      onChange={(e) => setDraftPrice(e.target.value)}
-                    />
-                  ) : (
-                    formatCurrency(row?.price)
-                  )}
-                </td>
-                <td>{row?.as_of ?? '—'}</td>
-                <td className={`is-numeric ${holding ? pnlClass(holding.unrealizedPnl) : ''}`}>
-                  {holding ? `${formatCurrency(holding.unrealizedPnl)} (${formatPercent(holding.unrealizedPct)})` : '—'}
-                </td>
-                <td className={`is-numeric ${totalPnl != null ? pnlClass(totalPnl) : ''}`}>
-                  {totalPnl != null ? formatCurrency(totalPnl) : '—'}
-                </td>
-                <td className="is-numeric ticker-prices__target-cell">
-                  {isEditingTarget ? (
-                    <>
-                      <input
-                        type="number"
-                        step="any"
-                        autoFocus
-                        value={draftTarget}
-                        onChange={(e) => setDraftTarget(e.target.value)}
-                      />
-                      <button className="btn-link" disabled={savingTarget} onClick={() => handleSaveTarget(ticker)}>
-                        {savingTarget ? 'Saving…' : 'Save'}
-                      </button>
-                      <button className="btn-link" disabled={savingTarget} onClick={cancelEditTarget}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {formatCurrency(targetRow?.target_price)}
-                      <button className="btn-link" onClick={() => startEditTarget(ticker)}>
-                        {targetRow ? 'Edit' : 'Set'}
-                      </button>
-                    </>
-                  )}
-                </td>
-                <td className="ticker-prices__actions">
-                  {isEditing ? (
-                    <>
-                      <button className="btn-link" disabled={saving} onClick={() => handleSave(ticker)}>
-                        {saving ? 'Saving…' : 'Save'}
-                      </button>
-                      <button className="btn-link" disabled={saving} onClick={cancelEdit}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="btn-link"
-                        disabled={autoUpdatingTicker === ticker}
-                        onClick={() => handleAutoUpdate(ticker)}
-                      >
-                        {autoUpdatingTicker === ticker ? 'Updating…' : 'Auto Update'}
-                      </button>
-                      <button className="btn-link" onClick={() => startEdit(ticker)}>
-                        Manual Update
-                      </button>
-                    </>
-                  )}
-                </td>
+
+      {tradesLoading || pricesLoading ? (
+        <div className="ticker-prices__empty">Loading prices…</div>
+      ) : error ? (
+        <div className="ticker-prices__empty">Error: {error}</div>
+      ) : !tickers.length ? (
+        <div className="ticker-prices__empty">
+          No tickers {selectedAccount === 'All' ? '' : `in ${selectedAccount} `}yet — add a trade first.
+        </div>
+      ) : (
+        <>
+          <div className="ticker-prices__toolbar">
+            <span className="ticker-prices__last-refreshed">Last refreshed: {formatTimestamp(lastRefreshed)}</span>
+            <button className="btn btn--primary" disabled={refreshing} onClick={handleRefreshAll}>
+              {refreshing ? 'Updating…' : 'Update All Prices'}
+            </button>
+          </div>
+          {refreshError && <p className="ticker-prices__error">{refreshError}</p>}
+          {refreshMessage && !refreshError && (
+            <p className="ticker-prices__message success-message">{refreshMessage}</p>
+          )}
+          <table className="ticker-prices">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                {accounts.map((account) => (
+                  <th key={account.id} className="is-held-col">
+                    {account.name}
+                  </th>
+                ))}
+                <th className="is-numeric">Current Price</th>
+                <th>As Of</th>
+                <th className="is-numeric">Open Gain/Loss</th>
+                <th className="is-numeric" title="Realized + Unrealized P/L across this ticker's full trade history">
+                  Total P/L
+                </th>
+                <th className="is-numeric">Price Target</th>
+                <th></th>
               </tr>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="ticker-prices__totals-row">
-            <td>Totals</td>
-            {accounts.map((account) => (
-              <td key={account.id} className="is-held-col"></td>
-            ))}
-            <td className="is-numeric"></td>
-            <td></td>
-            <td className={`is-numeric ${pnlClass(totals.openGainLoss)}`}>
-              {formatCurrency(totals.openGainLoss)} ({formatPercent(totals.openGainLossPct)})
-            </td>
-            <td className={`is-numeric ${pnlClass(totals.totalPnl)}`}>{formatCurrency(totals.totalPnl)}</td>
-            <td className="is-numeric"></td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
-      {saveError && <p className="ticker-prices__error">{saveError}</p>}
-      {autoUpdateError && <p className="ticker-prices__error">{autoUpdateError}</p>}
-      {saveTargetError && <p className="ticker-prices__error">{saveTargetError}</p>}
+            </thead>
+            <tbody>
+              {tickers.map((ticker) => {
+                const row = prices[ticker]
+                const isEditing = editingTicker === ticker
+                const targetRow = targets[ticker]
+                const isEditingTarget = editingTargetTicker === ticker
+                const holding = holdingByTicker.get(ticker)
+                const totalPnl = totalPnlByTicker.get(ticker)
+                return (
+                  <tr key={ticker}>
+                    <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
+                      {ticker}
+                    </td>
+                    {accounts.map((account) => {
+                      const qty = heldQtyByTickerAccount.get(ticker)?.get(account.name)
+                      return (
+                        <td key={account.id} className="is-held-col">
+                          {qty ? formatQuantity(qty) : ''}
+                        </td>
+                      )
+                    })}
+                    <td className="is-numeric">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step="any"
+                          autoFocus
+                          value={draftPrice}
+                          onChange={(e) => setDraftPrice(e.target.value)}
+                        />
+                      ) : (
+                        formatCurrency(row?.price)
+                      )}
+                    </td>
+                    <td>{row?.as_of ?? '—'}</td>
+                    <td className={`is-numeric ${holding ? pnlClass(holding.unrealizedPnl) : ''}`}>
+                      {holding
+                        ? `${formatCurrency(holding.unrealizedPnl)} (${formatPercent(holding.unrealizedPct)})`
+                        : '—'}
+                    </td>
+                    <td className={`is-numeric ${totalPnl != null ? pnlClass(totalPnl) : ''}`}>
+                      {totalPnl != null ? formatCurrency(totalPnl) : '—'}
+                    </td>
+                    <td className="is-numeric ticker-prices__target-cell">
+                      {isEditingTarget ? (
+                        <>
+                          <input
+                            type="number"
+                            step="any"
+                            autoFocus
+                            value={draftTarget}
+                            onChange={(e) => setDraftTarget(e.target.value)}
+                          />
+                          <button
+                            className="btn-link"
+                            disabled={savingTarget}
+                            onClick={() => handleSaveTarget(ticker)}
+                          >
+                            {savingTarget ? 'Saving…' : 'Save'}
+                          </button>
+                          <button className="btn-link" disabled={savingTarget} onClick={cancelEditTarget}>
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {formatCurrency(targetRow?.target_price)}
+                          <button className="btn-link" onClick={() => startEditTarget(ticker)}>
+                            {targetRow ? 'Edit' : 'Set'}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                    <td className="ticker-prices__actions">
+                      {isEditing ? (
+                        <>
+                          <button className="btn-link" disabled={saving} onClick={() => handleSave(ticker)}>
+                            {saving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button className="btn-link" disabled={saving} onClick={cancelEdit}>
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="btn-link"
+                            disabled={autoUpdatingTicker === ticker}
+                            onClick={() => handleAutoUpdate(ticker)}
+                          >
+                            {autoUpdatingTicker === ticker ? 'Updating…' : 'Auto Update'}
+                          </button>
+                          <button className="btn-link" onClick={() => startEdit(ticker)}>
+                            Manual Update
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="ticker-prices__totals-row">
+                <td>Totals</td>
+                {accounts.map((account) => (
+                  <td key={account.id} className="is-held-col"></td>
+                ))}
+                <td className="is-numeric"></td>
+                <td></td>
+                <td className={`is-numeric ${pnlClass(totals.openGainLoss)}`}>
+                  {formatCurrency(totals.openGainLoss)} ({formatPercent(totals.openGainLossPct)})
+                </td>
+                <td className={`is-numeric ${pnlClass(totals.totalPnl)}`}>{formatCurrency(totals.totalPnl)}</td>
+                <td className="is-numeric"></td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+          {saveError && <p className="ticker-prices__error">{saveError}</p>}
+          {autoUpdateError && <p className="ticker-prices__error">{autoUpdateError}</p>}
+          {saveTargetError && <p className="ticker-prices__error">{saveTargetError}</p>}
+        </>
+      )}
     </div>
   )
 }

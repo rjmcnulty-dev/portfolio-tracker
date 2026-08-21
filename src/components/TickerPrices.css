@@ -73,12 +73,32 @@
   white-space: nowrap;
 }
 
-.held-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--green);
+.ticker-prices__account-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 14px 14px 0;
+}
+
+.ticker-prices__account-btn {
+  border: 1px solid #d3d9e0;
+  background: #fff;
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ticker-prices__account-btn:hover {
+  background: var(--surface);
+}
+
+.ticker-prices__account-btn.is-active {
+  background: var(--navy-mid);
+  border-color: var(--navy-mid);
+  color: #fff;
 }
 
 .ticker-prices__actions {
@@ -116,9 +136,6 @@
 }
 
 .ticker-prices__empty {
-  background: #fff;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
   padding: 24px;
   color: var(--text-muted);
   font-size: 14px;
