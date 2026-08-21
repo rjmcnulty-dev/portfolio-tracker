@@ -227,10 +227,12 @@ export default function DailyGainsTable({ account, holdings, trades }) {
         </div>
       )}
       <p className="daily-gains__hint">
-        Hover a value for its % change. Cells show price-driven movement only — deposits and trades made that day
-        aren't included, since that's new capital, not a gain. Net Gain/Loss above is Change with deposits and
-        withdrawals backed out, so it should track this table's Total — small differences are expected, since Net
-        Gain/Loss comes from daily account-value snapshots and the Total comes from a per-ticker price replay.
+        Hover a value for its % change. Cells show price-driven movement — a buy made that day is credited with its
+        own gain/loss since purchase (against that day's price), not the day's move on shares it wasn't held for
+        yet; deposits and sells aren't included, since neither is a price-driven gain. Net Gain/Loss above is Change
+        with deposits and withdrawals backed out, so it should track this table's Total — small differences are
+        expected, since Net Gain/Loss comes from daily account-value snapshots and the Total comes from a
+        per-ticker price replay.
       </p>
     </div>
   )

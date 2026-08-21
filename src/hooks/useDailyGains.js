@@ -23,6 +23,12 @@ const DEFAULT_DAILY_GAINS_DEFAULTS = { defaultDayCount: 5, weekSize: 5 }
 // Columns come from the union of dates that actually have price history
 // across the held tickers (not a fixed calendar walk), so weekends/
 // holidays/gaps don't produce empty columns.
+//
+// ticker_price_history is written once a day, so a ticker bought before
+// that day's snapshot exists has nothing to diff against on the day right
+// after purchase — see buyPriceByTickerDate below, which fills that specific
+// gap with the trade's own execution price so recently-bought tickers don't
+// silently understate/overstate their total.
 export function useDailyGains(holdings, trades, range) {
   const { defaultDayCount } = useConfigValue('daily_gains_defaults', DEFAULT_DAILY_GAINS_DEFAULTS)
   const [historyByTicker, setHistoryByTicker] = useState({})
@@ -102,28 +108,91 @@ export function useDailyGains(holdings, trades, range) {
     return qty
   }
 
+  // Per ticker/date, the combined size and cost of that day's buy lots
+  // (quantity-weighted, so multiple same-day lots collapse into one
+  // accurate figure rather than picking one arbitrarily) — used two ways
+  // below: as a synthetic price point on dates with no real
+  // ticker_price_history row, and to credit new shares with their gain
+  // since purchase on the day they were actually bought (see changesByTicker).
+  const buyTotalsByTickerDate = useMemo(() => {
+    const totals = new Map()
+    for (const trade of trades) {
+      if (!isBuyTrade(trade.trade_type)) continue
+      const qty = Number(trade.quantity) || 0
+      const price = Number(trade.price) || 0
+      if (!qty || !price) continue
+      if (!totals.has(trade.ticker)) totals.set(trade.ticker, new Map())
+      const byDate = totals.get(trade.ticker)
+      const entry = byDate.get(trade.trade_date) ?? { totalQty: 0, totalCost: 0 }
+      entry.totalQty += qty
+      entry.totalCost += qty * price
+      byDate.set(trade.trade_date, entry)
+    }
+    return totals
+  }, [trades])
+
   const changesByTicker = useMemo(() => {
     const result = {}
     for (const holding of holdings) {
-      const history = historyByTicker[holding.ticker] ?? []
+      const realHistory = historyByTicker[holding.ticker] ?? []
+      const existingDates = new Set(realHistory.map((h) => h.as_of))
+      const buyTotals = buyTotalsByTickerDate.get(holding.ticker)
+      // ticker_price_history is written once a day, but a trade can happen
+      // any time — a ticker bought on a day with no snapshot yet has no
+      // price point to diff against until the next real one, so the
+      // movement between what was actually paid and that next snapshot
+      // would otherwise fall into an unrepresented gap.
+      const synthetic = []
+      if (buyTotals) {
+        for (const [date, { totalQty, totalCost }] of buyTotals) {
+          if (!existingDates.has(date)) synthetic.push({ as_of: date, price: totalCost / totalQty })
+        }
+      }
+      const history = [...realHistory, ...synthetic].sort((a, b) =>
+        a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : 0,
+      )
       const changes = []
-      for (let i = 1; i < history.length; i++) {
-        const prevPrice = history[i - 1].price
-        const currPrice = history[i].price
+      for (let i = 0; i < history.length; i++) {
         const date = history[i].as_of
-        const quantityHeld = quantityBefore(holding.ticker, date)
+        const currPrice = history[i].price
+        let dollarChange = 0
+        let priorValue = 0
+
+        // Existing shares' movement since the prior priced day — quantityBefore
+        // deliberately excludes trades dated `date` itself, since those shares
+        // weren't held at prevPrice and shouldn't inherit its movement.
+        if (i > 0) {
+          const prevPrice = history[i - 1].price
+          const quantityHeld = quantityBefore(holding.ticker, date)
+          dollarChange += (currPrice - prevPrice) * quantityHeld
+          priorValue += prevPrice * quantityHeld
+        }
+
+        // Shares bought exactly on `date` have no "prior day" to have moved
+        // from — excluded above by design — but that doesn't mean their own
+        // gain since purchase should wait until tomorrow to appear. Credited
+        // here against the same price used above, so a same-day buy shows a
+        // real number today instead of only from the next priced day onward.
+        const sameDayBuys = buyTotals?.get(date)
+        if (sameDayBuys) {
+          dollarChange += currPrice * sameDayBuys.totalQty - sameDayBuys.totalCost
+          priorValue += sameDayBuys.totalCost
+        }
+
+        if (i === 0 && !sameDayBuys) continue
+
         changes.push({
           date,
-          dollarChange: (currPrice - prevPrice) * quantityHeld,
-          percentChange: prevPrice ? ((currPrice - prevPrice) / prevPrice) * 100 : null,
-          priorValue: prevPrice * quantityHeld,
+          dollarChange,
+          percentChange: priorValue ? (dollarChange / priorValue) * 100 : null,
+          priorValue,
         })
       }
       result[holding.ticker] = changes
     }
     return result
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdings, historyByTicker, tradeEventsByTicker])
+  }, [holdings, historyByTicker, tradeEventsByTicker, buyTotalsByTickerDate])
 
   const allDates = useMemo(() => {
     const set = new Set()
