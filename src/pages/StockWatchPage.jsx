@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useWatchlist } from '../hooks/useWatchlist'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
 import { useHeldAccountsByTicker } from '../hooks/useHeldAccountsByTicker'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
 import TickerChecklist from '../components/TickerChecklist'
+
+// Stable fallback reference — `?? []` would create a new array every
+// render, which would defeat WatchlistCard's React.memo for any ticker
+// with no held accounts just as surely as not memoizing at all.
+const EMPTY_ARRAY = []
 
 export default function StockWatchPage() {
   const { watchlist, loading, error, addTicker, updateNotes, removeTicker } = useWatchlist()
@@ -40,39 +45,60 @@ export default function StockWatchPage() {
   // Toggles every subchart (Stochastic, OBV, and any future ones) on every
   // card at once, without touching range/MA/levels/earnings — see
   // WatchlistCard's separate subchartsBroadcast effect.
-  function handleToggleAllSubcharts() {
+  // useCallback everywhere below, matched with WatchlistCard's React.memo —
+  // useTwelveDataQueueStatus forces this page to re-render once a second
+  // while anything's queued, and without stable prop references every
+  // card (and its Recharts trees) would re-render/re-paint right along
+  // with it, which is exactly the "chart lines feel laggy" symptom this
+  // was built to fix.
+  const handleToggleAllSubcharts = useCallback(() => {
     setSubchartsBroadcast((prev) => ({ visible: !prev.visible, version: prev.version + 1 }))
-  }
+  }, [])
 
   // Same hiddenTickers Set the checklist on the left reads/writes — a
   // card's own Hide button and the checklist are just two entry points to
   // the one source of truth, so they can never drift out of sync.
-  function handleHide(ticker) {
+  const handleHide = useCallback((ticker) => {
     setHiddenTickers((prev) => new Set(prev).add(ticker))
-  }
+  }, [])
 
-  function handleToggleTicker(ticker) {
+  const handleToggleTicker = useCallback((ticker) => {
     setHiddenTickers((prev) => {
       const next = new Set(prev)
       if (next.has(ticker)) next.delete(ticker)
       else next.add(ticker)
       return next
     })
-  }
+  }, [])
 
-  function handleApplySync(settings) {
-    const tickers = watchlist.map((item) => item.ticker)
-    setSyncMap((prev) => {
-      const next = new Map(prev)
-      for (const ticker of tickers) {
-        const prevVersion = prev.get(ticker)?.version ?? 0
-        next.set(ticker, { ...settings, version: prevVersion + 1 })
-      }
-      return next
-    })
-  }
+  const handleApplySync = useCallback(
+    (settings) => {
+      const tickers = watchlist.map((item) => item.ticker)
+      setSyncMap((prev) => {
+        const next = new Map(prev)
+        for (const ticker of tickers) {
+          const prevVersion = prev.get(ticker)?.version ?? 0
+          next.set(ticker, { ...settings, version: prevVersion + 1 })
+        }
+        return next
+      })
+    },
+    [watchlist],
+  )
 
   const visibleWatchlist = watchlist.filter((item) => !hiddenTickers.has(item.ticker))
+
+  // Arrays, converted from heldAccountsByTicker's Sets once per ticker
+  // (not inline in JSX below) — a fresh `[...set]` on every render would
+  // give WatchlistCard a new heldAccounts array reference each time,
+  // breaking its React.memo even when nothing about this ticker changed.
+  const heldAccountsArrayByTicker = useMemo(() => {
+    const map = new Map()
+    for (const [ticker, accounts] of heldAccountsByTicker) {
+      map.set(ticker, [...accounts])
+    }
+    return map
+  }, [heldAccountsByTicker])
 
   async function handleAdd(event) {
     event.preventDefault()
@@ -157,7 +183,7 @@ export default function StockWatchPage() {
                     onSaveNotes={updateNotes}
                     syncSettings={syncMap.get(item.ticker)}
                     subchartsBroadcast={subchartsBroadcast}
-                    heldAccounts={[...(heldAccountsByTicker.get(item.ticker) ?? [])]}
+                    heldAccounts={heldAccountsArrayByTicker.get(item.ticker) ?? EMPTY_ARRAY}
                   />
                 ))}
               </div>

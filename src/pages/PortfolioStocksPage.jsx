@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAccounts } from '../hooks/useAccounts'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
@@ -153,33 +153,42 @@ function PortfolioStocksTab({ accountLabel }) {
     return result
   }, [trades])
 
-  function handleToggleAllSubcharts() {
+  // useCallback everywhere below, matched with WatchlistCard's React.memo —
+  // useTwelveDataQueueStatus forces this page to re-render once a second
+  // while anything's queued, and without stable prop references every
+  // card (and its Recharts trees) would re-render/re-paint right along
+  // with it, which is exactly the "chart lines feel laggy" symptom this
+  // was built to fix.
+  const handleToggleAllSubcharts = useCallback(() => {
     setSubchartsBroadcast((prev) => ({ visible: !prev.visible, version: prev.version + 1 }))
-  }
+  }, [])
 
-  function handleHide(ticker) {
+  const handleHide = useCallback((ticker) => {
     setHiddenTickers((prev) => new Set(prev).add(ticker))
-  }
+  }, [])
 
-  function handleToggleTicker(ticker) {
+  const handleToggleTicker = useCallback((ticker) => {
     setHiddenTickers((prev) => {
       const next = new Set(prev)
       if (next.has(ticker)) next.delete(ticker)
       else next.add(ticker)
       return next
     })
-  }
+  }, [])
 
-  function handleApplySync(settings) {
-    setSyncMap((prev) => {
-      const next = new Map(prev)
-      for (const item of items) {
-        const prevVersion = prev.get(item.ticker)?.version ?? 0
-        next.set(item.ticker, { ...settings, version: prevVersion + 1 })
-      }
-      return next
-    })
-  }
+  const handleApplySync = useCallback(
+    (settings) => {
+      setSyncMap((prev) => {
+        const next = new Map(prev)
+        for (const item of items) {
+          const prevVersion = prev.get(item.ticker)?.version ?? 0
+          next.set(item.ticker, { ...settings, version: prevVersion + 1 })
+        }
+        return next
+      })
+    },
+    [items],
+  )
 
   return (
     <>

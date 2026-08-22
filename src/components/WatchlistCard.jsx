@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -230,7 +230,13 @@ function TradeMarker({ cx, cy, fill, title }) {
   )
 }
 
-function PriceChart({
+// Wrapped in memo — every prop here already comes from a stable useMemo
+// upstream (chartData, support, resistance, earningsDates, visibleTrades),
+// so this can safely skip re-rendering (and Recharts skip re-painting)
+// whenever WatchlistCard re-renders for a reason unrelated to this chart's
+// own data — typing in the Notes field, a page-level re-render cascading
+// down from the ticking queue-status timer, etc.
+const PriceChart = memo(function PriceChart({
   chartData,
   range,
   showLevels,
@@ -346,7 +352,7 @@ function PriceChart({
       </LineChart>
     </ResponsiveContainer>
   )
-}
+})
 
 function StochasticTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -366,7 +372,7 @@ function StochasticTooltip({ active, payload, label }) {
 // incompatible with a dollar-price y-axis. Reads the same `chartData` array
 // (stochK/stochD were merged into it alongside sma20/50/200), it just plots
 // different fields on a different scale.
-function StochasticChart({ chartData, range, overbought, oversold, height }) {
+const StochasticChart = memo(function StochasticChart({ chartData, range, overbought, oversold, height }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
@@ -398,7 +404,7 @@ function StochasticChart({ chartData, range, overbought, oversold, height }) {
       </LineChart>
     </ResponsiveContainer>
   )
-}
+})
 
 function ObvTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -424,7 +430,7 @@ function ObvTooltip({ active, payload, label }) {
 // but reacts faster to recent changes since it weights them more heavily)
 // are what actually show the underlying direction, since raw OBV is jumpy
 // day to day.
-function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
+const ObvChart = memo(function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={chartData} margin={{ left: 8, right: 16 }}>
@@ -461,7 +467,7 @@ function ObvChart({ chartData, range, trendPeriod, emaPeriod, height }) {
       </LineChart>
     </ResponsiveContainer>
   )
-}
+})
 
 // change/changePct are already computed over the currently selected `range`
 // (first vs. last close in that chart's series) — this just surfaces that
@@ -558,7 +564,7 @@ function AccountHoldingsBanner({ accountHoldings, showUnrealizedOnly, onToggleUn
 // expanded modal, already open — "Close" then calls the passed onClose
 // (unmounts this instance) instead of collapsing back to a compact view
 // that was never rendered.
-export default function WatchlistCard({
+function WatchlistCard({
   item,
   onRemove,
   onHide,
@@ -1015,3 +1021,12 @@ export default function WatchlistCard({
     </>
   )
 }
+
+// See PriceChart's comment — the same reasoning applies one level up: every
+// prop passed in from StockWatchPage/PortfolioStocksPage is now a stable
+// reference (item/watchlist/items via useMemo, handlers via useCallback,
+// Map.get() lookups against useMemo'd Maps), so this can safely skip
+// re-rendering this card — and everything inside it, including its three
+// Recharts trees — when a sibling card's data changes or the page
+// re-renders for an unrelated reason (e.g. the queue-status ticker).
+export default memo(WatchlistCard)
