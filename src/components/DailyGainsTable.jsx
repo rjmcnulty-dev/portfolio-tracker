@@ -51,13 +51,12 @@ export default function DailyGainsTable({ account, holdings, trades }) {
 
   const { startValue, endValue } = useAccountValueBounds(account, rangeStart, rangeEnd)
   const valueChange = startValue != null && endValue != null ? endValue - startValue : null
-  const valueChangePct = valueChange != null && startValue ? (valueChange / startValue) * 100 : null
 
   const { totalDeposits, totalWithdrawals, netAmount } = useNetDepositsWithdrawals(account, rangeStart, rangeEnd)
 
   // The account's total value change minus new capital in/out — i.e. what
-  // Starting/Ending Account Value's Change would be if deposits/withdrawals
-  // hadn't happened. Should track the Daily Gains table's own Total column
+  // Starting/Ending Account Value's raw change would be if deposits/
+  // withdrawals hadn't happened. Should track the Daily Gains table's own Total column
   // (grandTotalDollar below); the two aren't computed from the same data
   // (this one's account-value snapshots, that one's per-ticker price replay),
   // so treat close-but-not-exact as expected, not a bug.
@@ -137,14 +136,6 @@ export default function DailyGainsTable({ account, holdings, trades }) {
           <span className="daily-gains__value-label">Ending Account Value</span>
           <span className="daily-gains__value-amount">{formatCurrency(endValue)}</span>
         </div>
-        {valueChange != null && (
-          <div className="daily-gains__value-item">
-            <span className="daily-gains__value-label">Change</span>
-            <span className={`daily-gains__value-amount ${pctClass(valueChange)}`}>
-              {formatCurrency(valueChange)} ({formatPct(valueChangePct)})
-            </span>
-          </div>
-        )}
         {netGainLoss != null && (
           <div className="daily-gains__value-item">
             <span className="daily-gains__value-label">Net Gain/Loss</span>
