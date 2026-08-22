@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAccounts } from '../hooks/useAccounts'
 import { useTradeLotAllocations } from '../hooks/useTradeLotAllocations'
-import { TRADE_TYPES } from '../lib/tradeTypes'
+import { useTradeTypes } from '../hooks/useTradeTypes'
 import './TradeForm.css'
 
 const EMPTY_TRADE = {
@@ -57,6 +57,7 @@ function computeRealizedPnl(quantity, price, fees, openLots, allocations) {
 
 export default function TradeForm({ trade, onClose, onSaved }) {
   const { accounts, error: accountsError } = useAccounts()
+  const { tradeTypes } = useTradeTypes()
   const { fetchOpenLots, fetchAllocationsForSell, saveAllocationsForSell } = useTradeLotAllocations()
 
   const [form, setForm] = useState(() => (trade ? { ...trade } : { ...EMPTY_TRADE }))
@@ -259,9 +260,9 @@ export default function TradeForm({ trade, onClose, onSaved }) {
             <label>
               Type
               <select value={form.trade_type} onChange={(e) => handleChange('trade_type', e.target.value)}>
-                {TRADE_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
+                {tradeTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.value}
                   </option>
                 ))}
               </select>

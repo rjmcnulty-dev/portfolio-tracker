@@ -3,7 +3,7 @@ import { useTrades } from './useTrades'
 import { useTickerPrices } from './useTickerPrices'
 import { useDeposits } from './useDeposits'
 import { supabase } from '../lib/supabase'
-import { isBuyTrade } from '../lib/tradeTypes'
+import { isBuyTrade, tradeDeductsCash } from '../lib/tradeTypes'
 
 export function usePortfolio(account = 'All') {
   const {
@@ -106,20 +106,27 @@ export function usePortfolio(account = 'All') {
     [totals],
   )
 
-  // Uninvested cash: deposits add, BUYs draw down by their original cost,
-  // SELLs add back their proceeds. Uses cost_basis for BUYs (reliable now
-  // that the trade form auto-calculates it as qty * price + fees) and
-  // qty * price - fees for SELL proceeds, independent of that row's own
-  // cost_basis (which represents the basis of the shares sold, not cash
-  // received). Can go negative if trades outspent recorded deposits —
-  // that's a real signal (missing a deposit entry), not clamped away.
+  // Uninvested cash: deposits add, cash-deducting buy-lot trades (BUY,
+  // Scheduled Buy — see tradeDeductsCash) draw down by their original cost,
+  // SELLs add back their proceeds. A buy-lot type that doesn't deduct cash
+  // (e.g. Dividend Reinvestment) still adds shares/cost basis elsewhere in
+  // this hook, just without a matching cash outflow here — the dividend
+  // that funded it was never recorded as cash in either direction. Uses
+  // cost_basis for cash-deducting buys (reliable now that the trade form
+  // auto-calculates it as qty * price + fees) and qty * price - fees for
+  // SELL proceeds, independent of that row's own cost_basis (which
+  // represents the basis of the shares sold, not cash received). Can go
+  // negative if trades outspent recorded deposits — that's a real signal
+  // (missing a deposit entry), not clamped away.
   const cashPosition = useMemo(() => {
     const totalDeposits = deposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
     const netTradeCash = trades.reduce((sum, trade) => {
       const quantity = Number(trade.quantity) || 0
       const price = Number(trade.price) || 0
       const fees = Number(trade.fees) || 0
-      if (isBuyTrade(trade.trade_type)) return sum - (Number(trade.cost_basis) || 0)
+      if (isBuyTrade(trade.trade_type)) {
+        return tradeDeductsCash(trade.trade_type) ? sum - (Number(trade.cost_basis) || 0) : sum
+      }
       if (trade.trade_type === 'SELL') return sum + (quantity * price - fees)
       return sum
     }, 0)

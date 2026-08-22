@@ -99,7 +99,7 @@ create table if not exists trades (
   id uuid primary key default gen_random_uuid(),
   account text not null references accounts (name) on update cascade,
   ticker text not null,
-  trade_type text not null check (trade_type in ('BUY', 'SELL', 'Scheduled Buy')),
+  trade_type text not null,
   quantity numeric not null,
   price numeric not null,
   trade_date date not null,
@@ -463,16 +463,17 @@ alter table deposit_schedules add constraint deposit_schedules_type_check check 
 );
 ```
 
-**If you already have a database from before "Scheduled Buy"**, run this migration to
-allow it as a `trades.trade_type` value (auto-materialized recurring trades use it instead
-of `'BUY'`, purely so they're visually distinguishable — everywhere that cares whether a
-trade opened a position treats the two identically):
+**If you already have a database from before "Scheduled Buy"**, run the migration below to
+allow it as a `trades.trade_type` value, then immediately superseded by the next one — see
+"Trade Types" for why.
+
+**If you already have a database from before `trade_types`** (including one that already
+ran the "Scheduled Buy" migration above), run this to drop the hardcoded check constraint —
+`trade_types` (and its "can't delete a type still in use" check) is what governs valid
+values now, so the old constraint only serves to block legitimately adding a custom type:
 
 ```sql
 alter table trades drop constraint if exists trades_trade_type_check;
-alter table trades add constraint trades_trade_type_check check (
-  trade_type in ('BUY', 'SELL', 'Scheduled Buy')
-);
 ```
 
 **If you already have a database from before the portfolio value chart**, run this
@@ -982,6 +983,68 @@ delete button will show an error telling you to delete the related SELL trade(s)
 deleting it out from under an already-computed realized P&L would silently corrupt that
 number.
 
+## Trade Types
+
+BUY, SELL, and Scheduled Buy are **core** trade types — permanently protected, since
+cost-basis, lot-matching, wash-sale, and cash-position logic throughout the app (client,
+several Edge Functions, and two GitHub Actions scripts) all assume those exact strings
+exist. Everything else about `trade_type` is DB-backed (`trade_types` table) and editable
+from `/admin`'s **Trade Types** tab, so a custom type can be added without a code change.
+Run once in the Supabase SQL editor:
+
+```sql
+create table if not exists trade_types (
+  value text primary key,
+  is_core boolean not null default false,
+  deducts_cash boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table trade_types enable row level security;
+create policy "Public read on trade_types" on trade_types for select using (true);
+create policy "Authenticated write on trade_types" on trade_types
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+insert into trade_types (value, is_core, deducts_cash) values
+  ('BUY', true, true),
+  ('SELL', true, false),
+  ('Scheduled Buy', true, true)
+on conflict (value) do nothing;
+```
+
+**If `trades` still has its original `trades_trade_type_check` constraint** (any database
+from before this feature), also run this — otherwise adding a custom type from `/admin`
+succeeds, but actually *using* it on a trade fails with `violates check constraint
+"trades_trade_type_check"`, since that old hardcoded list is still enforced underneath:
+
+```sql
+alter table trades drop constraint if exists trades_trade_type_check;
+```
+
+Read stays public (anon) since the New/Edit Trade dropdown needs it without a login, same as
+`app_config`; writes require `authenticated`. A custom type can't be deleted while any trade
+still uses it (checked before the delete, same "friendly error instead of a raw constraint
+failure" pattern as deleting an account with trades attached) — core types have no
+edit/delete control at all, not just a disabled one.
+
+**Every custom type is a buy-lot type** — it adds shares and tracks cost basis, the same as
+BUY. There's no way to add a second SELL-like type from this UI: closing a lot needs the
+wash-sale/lot-selection machinery SELL alone has, and generalizing that safely was out of
+scope here. The one behavior a custom type *does* configure is **"deducts cash"** — this is
+what lets something like **Dividend Reinvestment** be modeled correctly: shares added, cost
+basis tracked, but *no* matching cash outflow, since the money came from a dividend that was
+never recorded as cash in the first place (recording it as a normal cash-deducting buy would
+make Cash Position increasingly, incorrectly negative over time).
+
+**How this is wired up**: `src/lib/tradeTypes.js` keeps a module-level cache — configured
+once from `Layout.jsx` (same pattern as the Twelve Data rate limit) — so every existing
+`isBuyTrade(tradeType)` call site across the app stayed a plain one-argument function; only
+the cash-position formula needed a second flag, `tradeDeductsCash(tradeType)`. Edge Functions
+and the two GitHub Actions scripts can't share that in-browser cache (separate deploy units/
+processes), so each fetches `trade_types` for itself once per invocation via
+`supabase/functions/_shared/tradeTypes.ts` / `scripts/lib/tradeTypes.mjs` — both fall back to
+the original hardcoded `['BUY', 'Scheduled Buy']` set if the table is missing or empty, so
+this was a zero-downtime migration.
+
 ## Cash position
 
 The **Cash Position** KPI (Dashboard and each account page) isn't stored anywhere — it's
@@ -990,13 +1053,16 @@ uses:
 
 ```
 cash position = Σ deposits.amount
-              − Σ (BUY trades: cost_basis)
+              − Σ (cash-deducting buy-lot trades: cost_basis)
               + Σ (SELL trades: quantity × price − fees)
 ```
 
-Deposits add cash; a BUY draws it down by that lot's cost basis; a SELL adds back its
-proceeds. It's not clamped at zero — a negative cash position is a real signal (trades
-recorded without a matching deposit), shown in red rather than hidden.
+Deposits add cash; a cash-deducting buy-lot trade (BUY, Scheduled Buy, or a custom type with
+"deducts cash" on — see "Trade Types" above) draws it down by that lot's cost basis; a SELL
+adds back its proceeds. A buy-lot type with "deducts cash" off (e.g. Dividend Reinvestment)
+still adds shares/cost basis to Holdings, just with no cash effect here. It's not clamped at
+zero — a negative cash position is a real signal (trades recorded without a matching
+deposit), shown in red rather than hidden.
 
 ## Stock Watch
 
@@ -1559,8 +1625,10 @@ src/
     accounts.js         # slugify() for account name -> URL slug (no longer a static list)
     portfolioContext.js # buildPortfolioContext() — compact snapshot sent to AI Companion, see "AI Companion"
     aiUsagePricing.js   # estimateCost()/sumUsage() shared by session + all-time totals — see "Token Usage modal"
+    tradeTypes.js        # isBuyTrade()/tradeDeductsCash() — module-level trade_types cache, see "Trade Types"
   hooks/
     useAccounts.js          # Fetch accounts; addAccount() — see "Accounts"
+    useTradeTypes.js        # CRUD for trade_types (add/edit/delete custom types) — see "Trade Types"
     usePasswordRecovery.js  # Detects Supabase's PASSWORD_RECOVERY auth event — see "Password reset"
     useAiCompanion.js       # Chat state + calls ai-companion Edge Function — see "AI Companion"
     useAiUsageTotal.js      # All-time token usage, summed from ai_usage_log — see "Token Usage modal"
@@ -1609,6 +1677,7 @@ src/
     AdminPage.jsx            # Login-gated app config (/admin) — see "Admin / Auth"
     AdminConfigPage.jsx      # App Settings tab: app_config rows grouped by category, shape-aware form editor
     AdminSecretsPage.jsx     # Secrets tab: masked API key entry (Twelve Data/Finnhub/Anthropic) — see "Encrypted secrets"
+    AdminTradeTypesPage.jsx  # Trade Types tab: add/edit/delete custom trade types — see "Trade Types"
     AiCompanionPage.jsx      # Chat with Claude, portfolio-aware (/ai-companion) — see "AI Companion"
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
@@ -1617,11 +1686,13 @@ scripts/
   lib/
     config.mjs               # getConfig() — reads app_config, shared by the scripts above
     secrets.mjs               # getSecret() — calls reveal-secret, see "Encrypted secrets"
+    tradeTypes.mjs            # getTradeTypeSets() — reads trade_types, see "Trade Types"
 supabase/
   functions/
     _shared/
       config.ts               # getConfig() — Edge Function counterpart of scripts/lib/config.mjs
       secrets.ts               # encrypt/decrypt/getDecryptedSecret — see "Encrypted secrets"
+      tradeTypes.ts            # getTradeTypeSets() — Edge Function counterpart of scripts/lib/tradeTypes.mjs
     refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
     materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
     materialize-trades/      # On-demand version of materialize-trades.mjs, called by "Sync Now"

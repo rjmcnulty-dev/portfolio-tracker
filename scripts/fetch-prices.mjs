@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
 import { getSecret } from './lib/secrets.mjs'
+import { getTradeTypeSets } from './lib/tradeTypes.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -49,16 +50,11 @@ async function fetchQuotes(tickers, apiKey, maxSymbolsPerMinute, rateLimitWindow
   return quotes
 }
 
-// 'Scheduled Buy' behaves identically to 'BUY' for holdings purposes — kept
-// as a separate literal list (rather than importing src/lib/tradeTypes.js)
-// since this script runs under plain Node outside the Vite/React build.
-const BUY_TRADE_TYPES = ['BUY', 'Scheduled Buy']
-
-function computeQuantitiesByTicker(trades) {
+function computeQuantitiesByTicker(trades, buyLot) {
   const quantityByTicker = new Map()
   for (const trade of trades) {
     const qty = Number(trade.quantity) || 0
-    const signed = BUY_TRADE_TYPES.includes(trade.trade_type) ? qty : trade.trade_type === 'SELL' ? -qty : 0
+    const signed = buyLot.has(trade.trade_type) ? qty : trade.trade_type === 'SELL' ? -qty : 0
     quantityByTicker.set(trade.ticker, (quantityByTicker.get(trade.ticker) || 0) + signed)
   }
   return quantityByTicker
@@ -79,15 +75,20 @@ function computeHoldingsValue(quantityByTicker, quotes) {
   return total
 }
 
-// Same formula as usePortfolio.js's cashPosition: deposits add, BUYs draw
-// down by their cost, SELLs add back proceeds.
-function computeCashPosition(deposits, trades) {
+// Same formula as usePortfolio.js's cashPosition: deposits add, cash-
+// deducting buy-lot trades draw down by their cost, SELLs add back
+// proceeds — a buy-lot type that doesn't deduct cash (e.g. Dividend
+// Reinvestment) affects quantitiesByTicker/holdings value above but not
+// this, since the money that paid for it was never recorded as cash either.
+function computeCashPosition(deposits, trades, buyLot, deductsCash) {
   const totalDeposits = deposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
   const netTradeCash = trades.reduce((sum, trade) => {
     const quantity = Number(trade.quantity) || 0
     const price = Number(trade.price) || 0
     const fees = Number(trade.fees) || 0
-    if (BUY_TRADE_TYPES.includes(trade.trade_type)) return sum - (Number(trade.cost_basis) || 0)
+    if (buyLot.has(trade.trade_type)) {
+      return deductsCash.has(trade.trade_type) ? sum - (Number(trade.cost_basis) || 0) : sum
+    }
     if (trade.trade_type === 'SELL') return sum + (quantity * price - fees)
     return sum
   }, 0)
@@ -119,6 +120,7 @@ async function main() {
   }
 
   const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
+  const { buyLot, deductsCash } = await getTradeTypeSets(supabase)
   const quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs)
 
   const asOf = new Date().toISOString().slice(0, 10)
@@ -154,7 +156,9 @@ async function main() {
 
   console.log(`Updated prices for ${rows.length} ticker(s): ${rows.map((r) => r.ticker).join(', ')}`)
 
-  const totalValue = computeCashPosition(deposits, trades) + computeHoldingsValue(computeQuantitiesByTicker(trades), quotes)
+  const totalValue =
+    computeCashPosition(deposits, trades, buyLot, deductsCash) +
+    computeHoldingsValue(computeQuantitiesByTicker(trades, buyLot), quotes)
   const { error: snapshotError } = await supabase
     .from('portfolio_value_history')
     .upsert({ snapshot_date: asOf, total_value: totalValue }, { onConflict: 'snapshot_date' })
@@ -178,8 +182,8 @@ async function main() {
     account,
     snapshot_date: asOf,
     total_value:
-      computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? []) +
-      computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? []), quotes),
+      computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? [], buyLot, deductsCash) +
+      computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? [], buyLot), quotes),
   }))
 
   const { error: accountSnapshotError } = await supabase

@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
 import { getSecret } from './lib/secrets.mjs'
+import { getTradeTypeSets } from './lib/tradeTypes.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -22,8 +23,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-const BUY_TRADE_TYPES = ['BUY', 'Scheduled Buy']
 
 // Twelve Data's free tier caps at 8 API credits/minute; unlike the /price
 // endpoint, /time_series only accepts one symbol per call, so each ticker
@@ -167,6 +166,7 @@ async function main() {
   console.log(`Backfilling ${startDate} through ${endDate} for ${tickers.length} ticker(s): ${tickers.join(', ')}`)
 
   const rateLimit = await getConfig(supabase, 'twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
+  const { buyLot, deductsCash } = await getTradeTypeSets(supabase)
   const historyByTicker = await fetchAllHistories(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs)
   const priceCursors = new Map([...historyByTicker].map(([ticker, history]) => [ticker, makePriceCursor(history)]))
 
@@ -222,19 +222,21 @@ async function main() {
     getAccountState(deposit.account).cash += amount
   }
 
-  // Same cash-position formula as usePortfolio.js: a BUY draws down cash by
-  // its cost, a SELL adds back proceeds (qty × price − fees) — independent
-  // of that row's own cost_basis, which is the basis of the shares sold,
-  // not the cash received.
+  // Same cash-position formula as usePortfolio.js: a cash-deducting buy-lot
+  // trade draws down cash by its cost, a SELL adds back proceeds (qty ×
+  // price − fees) — independent of that row's own cost_basis, which is the
+  // basis of the shares sold, not the cash received. A buy-lot type that
+  // doesn't deduct cash (e.g. Dividend Reinvestment) still moves
+  // signedQty/quantityByTicker below, just with no matching cashDelta.
   function applyTrade(trade) {
     const qty = Number(trade.quantity) || 0
     const price = Number(trade.price) || 0
     const fees = Number(trade.fees) || 0
     const costBasis = Number(trade.cost_basis) || 0
-    const isBuy = BUY_TRADE_TYPES.includes(trade.trade_type)
+    const isBuy = buyLot.has(trade.trade_type)
     const isSell = trade.trade_type === 'SELL'
     const signedQty = isBuy ? qty : isSell ? -qty : 0
-    const cashDelta = isBuy ? -costBasis : isSell ? qty * price - fees : 0
+    const cashDelta = isBuy ? (deductsCash.has(trade.trade_type) ? -costBasis : 0) : isSell ? qty * price - fees : 0
 
     overallState.cash += cashDelta
     overallState.quantityByTicker.set(

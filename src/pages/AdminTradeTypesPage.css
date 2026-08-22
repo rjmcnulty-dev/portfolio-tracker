@@ -1,0 +1,78 @@
+.admin-trade-types {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+}
+
+.admin-trade-types__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+}
+
+.admin-trade-types__table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid #edf0f3;
+}
+
+.admin-trade-types__table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.admin-trade-types__value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.admin-trade-types__core-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-trade-types__actions {
+  text-align: right;
+}
+
+.admin-trade-types__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.admin-trade-types__add-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.admin-trade-types__checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
+}

@@ -10,6 +10,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../_shared/config.ts";
 import { getDecryptedSecret } from "../_shared/secrets.ts";
+import { getTradeTypeSets } from "../_shared/tradeTypes.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -67,11 +68,6 @@ async function fetchQuotes(
   return quotes;
 }
 
-// 'Scheduled Buy' behaves identically to 'BUY' for holdings purposes — kept
-// as a separate literal (rather than sharing src/lib/tradeTypes.js) since
-// Edge Functions are a separate Deno deploy unit from the Vite/React build.
-const BUY_TRADE_TYPES = ["BUY", "Scheduled Buy"];
-
 interface TradeForSnapshot {
   ticker: string;
   trade_type: string;
@@ -87,11 +83,11 @@ interface DepositForSnapshot {
   account: string;
 }
 
-function computeQuantitiesByTicker(trades: TradeForSnapshot[]): Map<string, number> {
+function computeQuantitiesByTicker(trades: TradeForSnapshot[], buyLot: Set<string>): Map<string, number> {
   const quantityByTicker = new Map<string, number>();
   for (const trade of trades) {
     const qty = Number(trade.quantity) || 0;
-    const signed = BUY_TRADE_TYPES.includes(trade.trade_type) ? qty : trade.trade_type === "SELL" ? -qty : 0;
+    const signed = buyLot.has(trade.trade_type) ? qty : trade.trade_type === "SELL" ? -qty : 0;
     quantityByTicker.set(trade.ticker, (quantityByTicker.get(trade.ticker) || 0) + signed);
   }
   return quantityByTicker;
@@ -111,15 +107,25 @@ function computeHoldingsValue(
   return total;
 }
 
-// Same formula as usePortfolio.js's cashPosition: deposits add, BUYs draw
-// down by their cost, SELLs add back proceeds.
-function computeCashPosition(deposits: DepositForSnapshot[], trades: TradeForSnapshot[]): number {
+// Same formula as usePortfolio.js's cashPosition: deposits add, cash-
+// deducting buy-lot trades draw down by their cost, SELLs add back
+// proceeds — a buy-lot type that doesn't deduct cash (e.g. Dividend
+// Reinvestment) affects quantitiesByTicker/holdings value above but not
+// this, since the money that paid for it was never recorded as cash either.
+function computeCashPosition(
+  deposits: DepositForSnapshot[],
+  trades: TradeForSnapshot[],
+  buyLot: Set<string>,
+  deductsCash: Set<string>,
+): number {
   const totalDeposits = deposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
   const netTradeCash = trades.reduce((sum, trade) => {
     const quantity = Number(trade.quantity) || 0;
     const price = Number(trade.price) || 0;
     const fees = Number(trade.fees) || 0;
-    if (BUY_TRADE_TYPES.includes(trade.trade_type)) return sum - (Number(trade.cost_basis) || 0);
+    if (buyLot.has(trade.trade_type)) {
+      return deductsCash.has(trade.trade_type) ? sum - (Number(trade.cost_basis) || 0) : sum;
+    }
     if (trade.trade_type === "SELL") return sum + (quantity * price - fees);
     return sum;
   }, 0);
@@ -151,6 +157,7 @@ Deno.serve(async (req) => {
   }
 
   const rateLimit = await getConfig(supabase, "twelve_data_rate_limit", DEFAULT_RATE_LIMIT);
+  const { buyLot, deductsCash } = await getTradeTypeSets(supabase);
 
   // Optional { ticker: "AAPL" } body targets a single symbol — used by the
   // per-row "Auto Update" button — instead of refreshing every held ticker.
@@ -257,7 +264,8 @@ Deno.serve(async (req) => {
   // the rest of the holdings, so it can't produce a meaningful snapshot.
   if (!requestedTicker) {
     const totalValue =
-      computeCashPosition(allDeposits, allTrades) + computeHoldingsValue(computeQuantitiesByTicker(allTrades), quotes);
+      computeCashPosition(allDeposits, allTrades, buyLot, deductsCash) +
+      computeHoldingsValue(computeQuantitiesByTicker(allTrades, buyLot), quotes);
     const { error: snapshotError } = await supabase
       .from("portfolio_value_history")
       .upsert({ snapshot_date: asOf, total_value: totalValue }, { onConflict: "snapshot_date" });
@@ -283,8 +291,8 @@ Deno.serve(async (req) => {
       account,
       snapshot_date: asOf,
       total_value:
-        computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? []) +
-        computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? []), quotes),
+        computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? [], buyLot, deductsCash) +
+        computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? [], buyLot), quotes),
     }));
 
     const { error: accountSnapshotError } = await supabase

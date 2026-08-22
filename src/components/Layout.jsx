@@ -13,8 +13,10 @@ import {
 } from 'lucide-react'
 import { useAccounts } from '../hooks/useAccounts'
 import { useConfigValue } from '../hooks/useAppConfig'
+import { useTradeTypes } from '../hooks/useTradeTypes'
 import { slugify } from '../lib/accounts'
 import { configureTwelveDataQueue } from '../lib/twelveDataQueue'
+import { configureTradeTypes } from '../lib/tradeTypes'
 import ManageAccountsForm from './ManageAccountsForm'
 import ManageToolsOrderForm from './ManageToolsOrderForm'
 
@@ -117,6 +119,14 @@ export default function Layout() {
   useEffect(() => {
     if (rateLimit) configureTwelveDataQueue({ maxPerWindow: rateLimit.maxPerWindow, windowMs: rateLimit.windowMs })
   }, [rateLimit])
+
+  // Same reasoning as the rate-limit effect above, for trade_types — feeds
+  // src/lib/tradeTypes.js's module-level cache that isBuyTrade()/
+  // tradeDeductsCash() actually read from.
+  const { tradeTypes } = useTradeTypes()
+  useEffect(() => {
+    configureTradeTypes(tradeTypes)
+  }, [tradeTypes])
 
   return (
     <div className="app-shell">

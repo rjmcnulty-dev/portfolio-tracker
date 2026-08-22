@@ -1,6 +1,7 @@
 import { useAuth } from '../hooks/useAuth'
 import AdminConfigPage from './AdminConfigPage'
 import AdminSecretsPage from './AdminSecretsPage'
+import AdminTradeTypesPage from './AdminTradeTypesPage'
 
 export default function AdminPage() {
   const { user, signOut } = useAuth()
@@ -33,6 +34,16 @@ export default function AdminPage() {
           </p>
         </header>
         <AdminSecretsPage />
+      </section>
+      <section className="page__section">
+        <header className="page__header">
+          <h2>Trade Types</h2>
+          <p className="page__subtitle">
+            BUY, SELL, and Scheduled Buy are protected — add custom types (e.g. Dividend Reinvestment) below. A
+            custom type can't be deleted while any trade still uses it.
+          </p>
+        </header>
+        <AdminTradeTypesPage />
       </section>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { BUY_TRADE_TYPES } from '../lib/tradeTypes'
+import { getBuyLotValues } from '../lib/tradeTypes'
 
 // Not a passive fetch-on-mount hook — lot data is only needed while editing
 // a SELL trade, scoped to whatever ticker/account/trade is currently being
@@ -15,7 +15,7 @@ export function useTradeLotAllocations() {
       .select('id, trade_date, quantity, price, cost_basis')
       .eq('account', account)
       .eq('ticker', ticker)
-      .in('trade_type', BUY_TRADE_TYPES)
+      .in('trade_type', getBuyLotValues())
       .order('trade_date', { ascending: true })
     if (buyError) throw buyError
 
