@@ -22,6 +22,80 @@
   color: var(--navy-dark);
 }
 
+.watchlist-card__account-holdings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border-left: 3px solid var(--blue);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.watchlist-card__account-holdings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.watchlist-card__account-holdings-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.watchlist-card__account-holdings-toggle {
+  display: flex;
+  gap: 2px;
+}
+
+.watchlist-card__account-holdings-toggle-btn {
+  background: none;
+  border: 1px solid #d3d9e0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+.watchlist-card__account-holdings-toggle-btn.is-active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+.watchlist-card__account-holdings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.watchlist-card__account-holdings-qty {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-card__account-holdings-pnl {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.watchlist-card__account-holdings-pnl.is-positive {
+  color: var(--green);
+}
+
+.watchlist-card__account-holdings-pnl.is-negative {
+  color: var(--red);
+}
+
 .watchlist-card__header {
   display: flex;
   justify-content: space-between;

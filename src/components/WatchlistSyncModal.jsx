@@ -18,6 +18,7 @@ export default function WatchlistSyncModal({ onApply, onClose }) {
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(2)
   const [showEarnings, setShowEarnings] = useState(true)
+  const [showTrades, setShowTrades] = useState(true)
   const [showStochastic, setShowStochastic] = useState(true)
   const [showOBV, setShowOBV] = useState(true)
 
@@ -27,6 +28,7 @@ export default function WatchlistSyncModal({ onApply, onClose }) {
     { key: 'sma200', label: 'MA 200', show: showSMA200, setShow: setShowSMA200 },
     { key: 'levels', label: 'Support / Resistance', show: showLevels, setShow: setShowLevels },
     { key: 'earnings', label: 'Earnings', show: showEarnings, setShow: setShowEarnings },
+    { key: 'trades', label: 'Trades', show: showTrades, setShow: setShowTrades },
     { key: 'stochastic', label: 'Stochastic', show: showStochastic, setShow: setShowStochastic },
     { key: 'obv', label: 'OBV', show: showOBV, setShow: setShowOBV },
   ]
@@ -40,6 +42,7 @@ export default function WatchlistSyncModal({ onApply, onClose }) {
       showLevels,
       levelCount,
       showEarnings,
+      showTrades,
       showStochastic,
       showOBV,
     })

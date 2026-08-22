@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAccounts } from '../hooks/useAccounts'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTwelveDataQueueStatus } from '../hooks/useTwelveDataQueueStatus'
+import { isBuyTrade } from '../lib/tradeTypes'
 import WatchlistCard from '../components/WatchlistCard'
 import WatchlistSyncModal from '../components/WatchlistSyncModal'
 import TickerChecklist from '../components/TickerChecklist'
@@ -65,7 +66,7 @@ export default function PortfolioStocksPage() {
 }
 
 function PortfolioStocksTab({ accountLabel }) {
-  const { holdings, loading, error } = usePortfolio(accountLabel)
+  const { holdings, trades, loading, error } = usePortfolio(accountLabel)
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [hiddenTickers, setHiddenTickers] = useState(new Set())
   const [syncMap, setSyncMap] = useState(new Map())
@@ -79,9 +80,78 @@ function PortfolioStocksTab({ accountLabel }) {
   // Cards need only {id, ticker} — WatchlistCard's Notes/Remove UI is
   // omitted entirely below (no onSaveNotes/onRemove passed) since a holding
   // isn't a watchlist row: there's nothing to remove (it's a real position)
-  // and nowhere to persist a note against it here.
-  const items = useMemo(() => holdings.map((h) => ({ id: h.ticker, ticker: h.ticker })), [holdings])
+  // and nowhere to persist a note against it here. Alphabetical by ticker,
+  // not `holdings`' own market-value-descending order — matches Stock
+  // Watch, where the watchlist query is already sorted this way.
+  const items = useMemo(
+    () =>
+      holdings
+        .map((h) => ({ id: h.ticker, ticker: h.ticker }))
+        .sort((a, b) => a.ticker.localeCompare(b.ticker)),
+    [holdings],
+  )
   const visibleItems = items.filter((item) => !hiddenTickers.has(item.ticker))
+
+  // Feeds each card's $ buy/sell markers on the price chart (see
+  // WatchlistCard's `trades` prop) — Stock Watch doesn't have an
+  // equivalent, since a watched ticker isn't necessarily a real position.
+  const tradesByTicker = useMemo(() => {
+    const map = new Map()
+    for (const trade of trades) {
+      if (!map.has(trade.ticker)) map.set(trade.ticker, [])
+      map.get(trade.ticker).push(trade)
+    }
+    return map
+  }, [trades])
+
+  // Per (ticker, account) quantity/P&L — same remaining_quantity/
+  // remaining_cost_basis/market_value/realized_pnl fields usePortfolio's own
+  // `holdings`/`pnlByTicker` use, just grouped by account too instead of
+  // combined across whichever account(s) the current tab covers. realizedPnl
+  // accumulates across every trade for that (ticker, account) — including
+  // ones that no longer hold shares — but the final result is still filtered
+  // to quantity > 0, so a fully-sold-off account doesn't show a phantom
+  // "0 sh" row; totalPnl (realized + unrealized) is what actually answers
+  // "how has this account done on this ticker overall," not just its current
+  // open position. Feeds each card's account-by-account breakdown (see
+  // WatchlistCard's `accountHoldings` prop) — still useful even on a
+  // single-account tab, not just "All".
+  const accountHoldingsByTicker = useMemo(() => {
+    const byTicker = new Map()
+    for (const trade of trades) {
+      if (!byTicker.has(trade.ticker)) byTicker.set(trade.ticker, new Map())
+      const byAccount = byTicker.get(trade.ticker)
+      const entry = byAccount.get(trade.account) || {
+        account: trade.account,
+        quantity: 0,
+        costBasis: 0,
+        marketValue: 0,
+        realizedPnl: 0,
+      }
+      entry.realizedPnl += Number(trade.realized_pnl) || 0
+      if (isBuyTrade(trade.trade_type)) {
+        entry.quantity += Number(trade.remaining_quantity) || 0
+        entry.costBasis += Number(trade.remaining_cost_basis) || 0
+        entry.marketValue += Number(trade.market_value) || 0
+      }
+      byAccount.set(trade.account, entry)
+    }
+
+    const result = new Map()
+    for (const [ticker, byAccount] of byTicker) {
+      result.set(
+        ticker,
+        [...byAccount.values()]
+          .filter((entry) => entry.quantity > 0)
+          .map((entry) => {
+            const unrealizedPnl = entry.marketValue - entry.costBasis
+            return { ...entry, unrealizedPnl, totalPnl: unrealizedPnl + entry.realizedPnl }
+          })
+          .sort((a, b) => a.account.localeCompare(b.account)),
+      )
+    }
+    return result
+  }, [trades])
 
   function handleToggleAllSubcharts() {
     setSubchartsBroadcast((prev) => ({ visible: !prev.visible, version: prev.version + 1 }))
@@ -157,6 +227,8 @@ function PortfolioStocksTab({ accountLabel }) {
                     onHide={handleHide}
                     syncSettings={syncMap.get(item.ticker)}
                     subchartsBroadcast={subchartsBroadcast}
+                    trades={tradesByTicker.get(item.ticker)}
+                    accountHoldings={accountHoldingsByTicker.get(item.ticker)}
                   />
                 ))}
               </div>

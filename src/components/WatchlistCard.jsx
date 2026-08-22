@@ -4,6 +4,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -21,6 +22,7 @@ import {
   smoothPoints,
 } from '../lib/technicalIndicators'
 import { useConfigValue } from '../hooks/useAppConfig'
+import { isBuyTrade } from '../lib/tradeTypes'
 import ConfirmDialog from './ConfirmDialog'
 import './WatchlistCard.css'
 
@@ -152,10 +154,22 @@ function ChartControls({ range, setRange, indicators, levelCount, setLevelCount,
 // Line/Area/Bar series at the hovered x). A custom content renderer lets the
 // callout append them as a fixed supplementary block alongside whatever's
 // under the cursor.
-function ChartTooltip({ active, payload, label, support, resistance, showLevels, showEarnings, earningsDates }) {
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  support,
+  resistance,
+  showLevels,
+  showEarnings,
+  earningsDates,
+  showTrades,
+  trades,
+}) {
   if (!active || !payload?.length) return null
 
   const isEarningsDate = showEarnings && earningsDates.includes(label)
+  const dayTrades = showTrades ? trades.filter((t) => t.chartDate === label) : []
 
   return (
     <div className="watchlist-card__tooltip">
@@ -170,6 +184,15 @@ function ChartTooltip({ active, payload, label, support, resistance, showLevels,
           Earnings report
         </p>
       )}
+      {dayTrades.map((trade) => (
+        <p
+          key={trade.id}
+          className="watchlist-card__tooltip-row"
+          style={{ color: isBuyTrade(trade.trade_type) ? 'var(--green)' : 'var(--red)' }}
+        >
+          {trade.trade_type} {trade.quantity} @ {formatCurrency(trade.price)}
+        </p>
+      ))}
       {showLevels && (resistance.length > 0 || support.length > 0) && (
         <div className="watchlist-card__tooltip-levels">
           {resistance.map((level) => (
@@ -188,6 +211,25 @@ function ChartTooltip({ active, payload, label, support, resistance, showLevels,
   )
 }
 
+// A plain white-filled circle with a colored "$" glyph — plotted at each
+// trade's own (date, execution price), not the day's close, so it sits
+// exactly where the money actually changed hands even on a day the price
+// moved around a lot after the trade. title gives a native browser tooltip
+// on hover (Recharts' own Tooltip only reflects Line/Area/Bar series, not
+// ReferenceDot).
+function TradeMarker({ cx, cy, fill, title }) {
+  if (cx == null || cy == null) return null
+  return (
+    <g>
+      <title>{title}</title>
+      <circle cx={cx} cy={cy} r={8} fill="#fff" stroke={fill} strokeWidth={1.5} />
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight="700" fill={fill}>
+        $
+      </text>
+    </g>
+  )
+}
+
 function PriceChart({
   chartData,
   range,
@@ -200,6 +242,8 @@ function PriceChart({
   maPeriods,
   showEarnings,
   earningsDates,
+  showTrades,
+  trades,
   height,
 }) {
   return (
@@ -222,6 +266,8 @@ function PriceChart({
               showLevels={showLevels}
               showEarnings={showEarnings}
               earningsDates={earningsDates}
+              showTrades={showTrades}
+              trades={trades}
             />
           }
         />
@@ -254,6 +300,21 @@ function PriceChart({
               stroke="var(--green)"
               strokeDasharray="4 4"
               label={{ value: `S ${formatCurrency(level.price)}`, position: 'insideBottomRight', fill: 'var(--green)', fontSize: 10 }}
+            />
+          ))}
+        {showTrades &&
+          trades.map((trade) => (
+            <ReferenceDot
+              key={trade.id}
+              x={trade.chartDate}
+              y={trade.price}
+              shape={(props) => (
+                <TradeMarker
+                  {...props}
+                  fill={isBuyTrade(trade.trade_type) ? 'var(--green)' : 'var(--red)'}
+                  title={`${trade.trade_type} ${trade.quantity} @ ${formatCurrency(trade.price)} — ${trade.trade_date}`}
+                />
+              )}
             />
           ))}
         <Line type="monotone" dataKey="close" name="Close" stroke="var(--blue)" dot={false} strokeWidth={2} />
@@ -434,6 +495,64 @@ function HeldBanner({ heldAccounts }) {
   )
 }
 
+function formatQuantity(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return num.toLocaleString('en-US', { maximumFractionDigits: 4 })
+}
+
+function pnlClass(value) {
+  if (value > 0) return 'is-positive'
+  if (value < 0) return 'is-negative'
+  return ''
+}
+
+// Portfolio Stocks only (see WatchlistCard's accountHoldings prop) — Stock
+// Watch never passes this, since a watched ticker isn't necessarily a real
+// position. One row per account currently holding this ticker, even on a
+// single-account tab (still useful to see that account's own quantity/P&L,
+// not just the combined total already shown elsewhere on the card).
+// Total (realized + unrealized) by default, with a toggle for unrealized-only
+// — showUnrealizedOnly/onToggleUnrealized are lifted to WatchlistCard, same
+// as every other chart control here, so the compact card and expanded modal
+// (two separate mounts of this component) stay in sync with each other.
+function AccountHoldingsBanner({ accountHoldings, showUnrealizedOnly, onToggleUnrealized }) {
+  if (!accountHoldings || accountHoldings.length === 0) return null
+  return (
+    <div className="watchlist-card__account-holdings">
+      <div className="watchlist-card__account-holdings-header">
+        <span className="watchlist-card__account-holdings-label">P/L by Account</span>
+        <div className="watchlist-card__account-holdings-toggle">
+          <button
+            type="button"
+            className={`watchlist-card__account-holdings-toggle-btn ${!showUnrealizedOnly ? 'is-active' : ''}`}
+            onClick={() => onToggleUnrealized(false)}
+          >
+            Total
+          </button>
+          <button
+            type="button"
+            className={`watchlist-card__account-holdings-toggle-btn ${showUnrealizedOnly ? 'is-active' : ''}`}
+            onClick={() => onToggleUnrealized(true)}
+          >
+            Unrealized
+          </button>
+        </div>
+      </div>
+      {accountHoldings.map(({ account, quantity, unrealizedPnl, totalPnl }) => {
+        const pnl = showUnrealizedOnly ? unrealizedPnl : totalPnl
+        return (
+          <div key={account} className="watchlist-card__account-holdings-row">
+            <span className="account-badge">{account}</span>
+            <span className="watchlist-card__account-holdings-qty">{formatQuantity(quantity)} sh</span>
+            <span className={`watchlist-card__account-holdings-pnl ${pnlClass(pnl)}`}>{formatCurrency(pnl)}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // modalOnly (used by TickerLink, e.g. a ticker cell on the Account pages'
 // tables) skips the compact card entirely and renders straight into the
 // expanded modal, already open — "Close" then calls the passed onClose
@@ -447,6 +566,8 @@ export default function WatchlistCard({
   syncSettings,
   subchartsBroadcast,
   heldAccounts,
+  accountHoldings,
+  trades,
   modalOnly,
   onClose,
 }) {
@@ -466,6 +587,7 @@ export default function WatchlistCard({
   const [showLevels, setShowLevels] = useState(true)
   const [levelCount, setLevelCount] = useState(srTuning.maxLevelsDefault)
   const [showEarnings, setShowEarnings] = useState(true)
+  const [showTrades, setShowTrades] = useState(true)
   const [showStochastic, setShowStochastic] = useState(true)
   const [showOBV, setShowOBV] = useState(true)
   const [expanded, setExpanded] = useState(Boolean(modalOnly))
@@ -496,6 +618,7 @@ export default function WatchlistCard({
     levelCountTouched.current = true
     setLevelCount(syncSettings.levelCount)
     setShowEarnings(syncSettings.showEarnings)
+    setShowTrades(syncSettings.showTrades)
     setShowStochastic(syncSettings.showStochastic)
     setShowOBV(syncSettings.showOBV)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -512,6 +635,7 @@ export default function WatchlistCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subchartsBroadcast?.version])
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [showUnrealizedOnly, setShowUnrealizedOnly] = useState(false)
   const [notes, setNotes] = useState(item.notes ?? '')
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
@@ -565,6 +689,23 @@ export default function WatchlistCard({
     [series, sma20, sma50, sma200, stochastic, obv, obvTrend, obvEma],
   )
 
+  // Matches each trade to the chartData point for its day — chartData's own
+  // `date` values carry a time-of-day for intraday ranges (1D/1W), so an
+  // exact string match only works for daily-or-coarser ranges; startsWith
+  // covers both. A trade with no matching point (outside the currently
+  // selected range, or a day with no price data) is silently dropped rather
+  // than plotted with no real x position.
+  const visibleTrades = useMemo(() => {
+    if (!trades?.length) return []
+    return trades
+      .map((trade) => {
+        const point = chartData.find((d) => d.date === trade.trade_date || d.date.startsWith(trade.trade_date))
+        if (!point) return null
+        return { ...trade, chartDate: point.date, price: Number(trade.price) }
+      })
+      .filter(Boolean)
+  }, [trades, chartData])
+
   function closeExpanded() {
     if (modalOnly) onClose?.()
     else setExpanded(false)
@@ -592,6 +733,13 @@ export default function WatchlistCard({
       show: showEarnings,
       setShow: setShowEarnings,
       disabled: !earningsDates.length,
+    },
+    {
+      key: 'trades',
+      label: 'Trades',
+      show: showTrades,
+      setShow: setShowTrades,
+      disabled: !visibleTrades.length,
     },
     {
       key: 'stochastic',
@@ -634,6 +782,8 @@ export default function WatchlistCard({
     maPeriods,
     showEarnings,
     earningsDates,
+    showTrades,
+    trades: visibleTrades,
   }
 
   return (
@@ -641,6 +791,11 @@ export default function WatchlistCard({
       {!modalOnly && (
         <div className="watchlist-card">
           <HeldBanner heldAccounts={heldAccounts} />
+          <AccountHoldingsBanner
+            accountHoldings={accountHoldings}
+            showUnrealizedOnly={showUnrealizedOnly}
+            onToggleUnrealized={setShowUnrealizedOnly}
+          />
           <div className="watchlist-card__header">
             <div>
               <div className="watchlist-card__title-row">
@@ -758,6 +913,11 @@ export default function WatchlistCard({
         <div className="modal-overlay" onClick={closeExpanded}>
           <div className="modal watchlist-modal" onClick={(event) => event.stopPropagation()}>
             <HeldBanner heldAccounts={heldAccounts} />
+            <AccountHoldingsBanner
+              accountHoldings={accountHoldings}
+              showUnrealizedOnly={showUnrealizedOnly}
+              onToggleUnrealized={setShowUnrealizedOnly}
+            />
             <div className="watchlist-modal__header">
               <div className="watchlist-card__title-row">
                 <span className="watchlist-card__ticker">{item.ticker}</span>
