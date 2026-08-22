@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+// Fire-and-forget, deliberately not awaited by the caller — a trade that
+// changes holdings/cash leaves account_value_history's most recent snapshot
+// stale until the next full price refresh (scheduled, or "Update All
+// Prices") recomputes it. This re-runs just that recompute, using whatever
+// prices are already in ticker_prices (no Twelve Data call, no rate limit,
+// no API cost), so the Daily Gains banner and other account-value reads
+// don't drift out of sync with a trade just entered. Failure here shouldn't
+// block or fail the trade mutation itself — it's a background consistency
+// fix-up, not part of the trade write.
+function triggerResnapshot() {
+  supabase.functions
+    .invoke('refresh-prices', { body: { resnapshotOnly: true } })
+    .catch((err) => console.error('Account value resnapshot failed:', err))
+}
+
 export function useTrades(account = 'All') {
   const [trades, setTrades] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +59,7 @@ export function useTrades(account = 'All') {
       const { error: insertError } = await supabase.from('trades').insert(trade)
       if (insertError) throw insertError
       await fetchTrades()
+      triggerResnapshot()
     },
     [fetchTrades],
   )
@@ -53,6 +69,7 @@ export function useTrades(account = 'All') {
       const { error: updateError } = await supabase.from('trades').update(updates).eq('id', id)
       if (updateError) throw updateError
       await fetchTrades()
+      triggerResnapshot()
     },
     [fetchTrades],
   )
@@ -78,6 +95,7 @@ export function useTrades(account = 'All') {
       const { error: deleteError } = await supabase.from('trades').delete().eq('id', id)
       if (deleteError) throw deleteError
       await fetchTrades()
+      triggerResnapshot()
     },
     [fetchTrades],
   )

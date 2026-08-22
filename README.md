@@ -840,6 +840,21 @@ succession, or an Auto Update immediately followed by a full refresh, can still 
 "You have run out of API credits for the current minute" — the error surfaces cleanly in
 the UI either way, just wait a few seconds and retry.
 
+**A third mode, `{ resnapshotOnly: true }`**: `account_value_history`/`portfolio_value_history`
+are only recomputed as a side effect of a price refresh — so adding, editing, or deleting a
+trade changes holdings/cash immediately, but the day's account-value snapshot doesn't catch
+up until the next scheduled refresh or manual "Update All Prices." In between, anything that
+reads those snapshots (the Daily Gains table's banner, `useAccountValueBounds`) silently
+shows a stale number — found in practice as a real mismatch between the Daily Gains banner
+and its own Total column right after adding a same-day trade. `useTrades.js`'s `addTrade`/
+`updateTrade`/`deleteTrade` now fire-and-forget an `invoke('refresh-prices', { body: {
+resnapshotOnly: true } })` after every mutation to close that gap. This mode skips Twelve
+Data entirely — it reads whatever's already in `ticker_prices` and just re-runs the
+cash/holdings-value math — so it costs no API credits and isn't rate-limited, safe to call
+after every trade write. It does *not* cover trades inserted directly by
+`materialize-trades`/`materialize-deposits` (recurring schedules) — those still wait for the
+next scheduled price refresh, which in practice runs the same day.
+
 ## Recurring deposits
 
 The Deposits and Withdrawals page (`/deposits`) has two parts:

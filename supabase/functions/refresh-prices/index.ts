@@ -154,10 +154,18 @@ Deno.serve(async (req) => {
 
   // Optional { ticker: "AAPL" } body targets a single symbol — used by the
   // per-row "Auto Update" button — instead of refreshing every held ticker.
+  // Optional { resnapshotOnly: true } skips Twelve Data entirely and
+  // recomputes portfolio/account value snapshots from whatever prices are
+  // already in ticker_prices — used after adding/editing/deleting a trade,
+  // where the prices themselves haven't changed but holdings/cash have, so
+  // the snapshot needs to catch up without spending API credits on prices
+  // nothing actually asked to refresh.
   let requestedTicker: string | null = null;
+  let resnapshotOnly = false;
   try {
     const body = await req.json();
     if (body?.ticker) requestedTicker = String(body.ticker).trim().toUpperCase();
+    if (body?.resnapshotOnly) resnapshotOnly = true;
   } catch {
     // No body (or invalid JSON) — fall through to refreshing everything.
   }
@@ -188,49 +196,65 @@ Deno.serve(async (req) => {
     return json({ message: "No tickers found in trades — nothing to fetch.", updated: [] });
   }
 
-  let quotes: Record<string, { price?: string }>;
-  try {
-    quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs);
-  } catch (err) {
-    return json({ error: err instanceof Error ? err.message : String(err) }, 502);
-  }
-
   const asOf = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
-  const rows: { ticker: string; price: number; as_of: string; updated_at: string }[] = [];
+  let quotes: Record<string, { price?: string }>;
+  let updatedTickers: string[] = [];
 
-  for (const ticker of tickers) {
-    const quote = quotes[ticker];
-    const price = Number(quote?.price);
-    if (!quote || Number.isNaN(price)) continue;
-    rows.push({ ticker, price, as_of: asOf, updated_at: now });
+  if (resnapshotOnly) {
+    const { data: currentPrices, error: pricesError } = await supabase
+      .from("ticker_prices")
+      .select("ticker, price")
+      .in("ticker", tickers);
+    if (pricesError) {
+      return json({ error: pricesError.message }, 500);
+    }
+    quotes = {};
+    for (const row of currentPrices ?? []) {
+      quotes[row.ticker] = { price: String(row.price) };
+    }
+  } else {
+    try {
+      quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs);
+    } catch (err) {
+      return json({ error: err instanceof Error ? err.message : String(err) }, 502);
+    }
+
+    const rows: { ticker: string; price: number; as_of: string; updated_at: string }[] = [];
+    for (const ticker of tickers) {
+      const quote = quotes[ticker];
+      const price = Number(quote?.price);
+      if (!quote || Number.isNaN(price)) continue;
+      rows.push({ ticker, price, as_of: asOf, updated_at: now });
+    }
+
+    if (!rows.length) {
+      return json({ message: "No valid prices returned.", updated: [] });
+    }
+    updatedTickers = rows.map((r) => r.ticker);
+
+    const { error: upsertError } = await supabase.from("ticker_prices").upsert(rows, { onConflict: "ticker" });
+    if (upsertError) {
+      return json({ error: upsertError.message }, 500);
+    }
+
+    // Same prices, no extra API cost — also keeps a dated history instead of
+    // only the latest, so the Daily Gains table can look up yesterday's price
+    // per ticker. Unlike the portfolio/account snapshots below, this is worth
+    // doing even for a single-ticker "Auto Update" — one ticker's history is
+    // still useful, unlike a portfolio total that needs every holding priced.
+    const historyRows = rows.map(({ ticker, price, as_of }) => ({ ticker, price, as_of }));
+    const { error: historyError } = await supabase
+      .from("ticker_price_history")
+      .upsert(historyRows, { onConflict: "ticker,as_of" });
+    if (historyError) {
+      return json({ error: historyError.message }, 500);
+    }
   }
 
-  if (!rows.length) {
-    return json({ message: "No valid prices returned.", updated: [] });
-  }
-
-  const { error: upsertError } = await supabase.from("ticker_prices").upsert(rows, { onConflict: "ticker" });
-  if (upsertError) {
-    return json({ error: upsertError.message }, 500);
-  }
-
-  // Same prices, no extra API cost — also keeps a dated history instead of
-  // only the latest, so the Daily Gains table can look up yesterday's price
-  // per ticker. Unlike the portfolio/account snapshots below, this is worth
-  // doing even for a single-ticker "Auto Update" — one ticker's history is
-  // still useful, unlike a portfolio total that needs every holding priced.
-  const historyRows = rows.map(({ ticker, price, as_of }) => ({ ticker, price, as_of }));
-  const { error: historyError } = await supabase
-    .from("ticker_price_history")
-    .upsert(historyRows, { onConflict: "ticker,as_of" });
-  if (historyError) {
-    return json({ error: historyError.message }, 500);
-  }
-
-  // Only a full refresh (every held ticker) reflects a real day's portfolio
-  // value — a single-ticker "Auto Update" doesn't have prices for the rest
-  // of the holdings, so it can't produce a meaningful snapshot.
+  // Only a full refresh/resnapshot (every held ticker) reflects a real day's
+  // portfolio value — a single-ticker "Auto Update" doesn't have prices for
+  // the rest of the holdings, so it can't produce a meaningful snapshot.
   if (!requestedTicker) {
     const totalValue =
       computeCashPosition(allDeposits, allTrades) + computeHoldingsValue(computeQuantitiesByTicker(allTrades), quotes);
@@ -271,7 +295,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ message: `Updated ${rows.length} ticker(s).`, updated: rows.map((r) => r.ticker) });
+  if (resnapshotOnly) {
+    return json({ message: "Resnapshotted account values." });
+  }
+  return json({ message: `Updated ${updatedTickers.length} ticker(s).`, updated: updatedTickers });
 });
 
 /* To invoke locally:

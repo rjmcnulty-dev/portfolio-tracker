@@ -94,7 +94,7 @@ export default function DailyGainsTable({ account, holdings, trades }) {
 
   return (
     <div className="chart-card daily-gains">
-      <h3 className="chart-card__title">Daily Gains and Losses</h3>
+      <h3 className="chart-card__title">Gains/Losses for Period</h3>
 
       <div className="daily-gains__value-summary">
         <div className="daily-gains__value-item">
