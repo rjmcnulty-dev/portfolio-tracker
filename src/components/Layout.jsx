@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import {
+  ArrowLeftRight,
+  Bot,
+  ClipboardList,
+  DollarSign,
+  Eye,
+  PieChart,
+  Percent,
+  Settings,
+  Wallet,
+} from 'lucide-react'
 import { useAccounts } from '../hooks/useAccounts'
 import { useConfigValue } from '../hooks/useAppConfig'
 import { slugify } from '../lib/accounts'
@@ -11,15 +22,33 @@ function linkClass({ isActive }) {
   return `sidebar__link ${isActive ? 'is-active' : ''}`
 }
 
+function iconLinkClass({ isActive }) {
+  return `sidebar__icon-link ${isActive ? 'is-active' : ''}`
+}
+
+const SKIP_WORDS = new Set(['and', '&', '-', '/'])
+
+// Account names are arbitrary user text, not a fixed set a real icon could
+// be curated for the way TOOL_LINKS' icons below are — a 2-letter monogram
+// works for any name with no per-account icon-picking needed. Collisions
+// (two accounts landing on the same initials) are fine; the full name is
+// still available via each link's title tooltip.
+function getInitials(label) {
+  const words = label.split(/[\s/&-]+/).filter((w) => w && !SKIP_WORDS.has(w.toLowerCase()))
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return label.slice(0, 2).toUpperCase()
+}
+
 const TOOL_LINKS = [
-  { key: 'trades', to: '/trades', label: 'Trade Log' },
-  { key: 'prices', to: '/prices', label: 'Holdings - Prices' },
-  { key: 'deposits', to: '/deposits', label: 'Deposits and Withdrawals' },
-  { key: 'watch', to: '/watch', label: 'Stock Watch' },
-  { key: 'portfolio-stocks', to: '/portfolio-stocks', label: 'Portfolio Stocks' },
-  { key: 'tax', to: '/tax', label: 'Tax & Roth' },
-  { key: 'ai-companion', to: '/ai-companion', label: 'AI Companion' },
-  { key: 'admin', to: '/admin', label: 'Admin' },
+  { key: 'trades', to: '/trades', label: 'Trade Log', icon: ClipboardList },
+  { key: 'prices', to: '/prices', label: 'Holdings - Prices', icon: DollarSign },
+  { key: 'deposits', to: '/deposits', label: 'Deposits and Withdrawals', icon: ArrowLeftRight },
+  { key: 'watch', to: '/watch', label: 'Stock Watch', icon: Eye },
+  { key: 'portfolio-stocks', to: '/portfolio-stocks', label: 'Portfolio Stocks', icon: PieChart },
+  { key: 'tax', to: '/tax', label: 'Tax & Roth', icon: Percent },
+  { key: 'ai-companion', to: '/ai-companion', label: 'AI Companion', icon: Bot },
+  { key: 'admin', to: '/admin', label: 'Admin', icon: Settings },
 ]
 const DEFAULT_TOOL_ORDER = TOOL_LINKS.map((t) => t.key)
 const TOOLS_ORDER_KEY = 'portfolio-tracker:tools-order'
@@ -105,7 +134,29 @@ export default function Layout() {
             {sidebarCollapsed ? '»' : '«'}
           </button>
         </div>
-        {!sidebarCollapsed && (
+        {sidebarCollapsed ? (
+          <nav className="sidebar__nav sidebar__nav--collapsed">
+            <NavLink to="/" end className={iconLinkClass} title="All Accounts">
+              <Wallet size={18} strokeWidth={2} />
+            </NavLink>
+            {accounts.map((account) => (
+              <NavLink
+                key={account.id}
+                to={`/account/${slugify(account.name)}`}
+                className={iconLinkClass}
+                title={account.name}
+              >
+                {getInitials(account.name)}
+              </NavLink>
+            ))}
+            <div className="sidebar__collapsed-divider" />
+            {orderedTools.map((tool) => (
+              <NavLink key={tool.key} to={tool.to} className={iconLinkClass} title={tool.label}>
+                <tool.icon size={18} strokeWidth={2} />
+              </NavLink>
+            ))}
+          </nav>
+        ) : (
           <nav className="sidebar__nav">
             <div className="sidebar__section-header">
               <p className="sidebar__section-label">Accounts</p>
@@ -118,6 +169,7 @@ export default function Layout() {
               </button>
             </div>
             <NavLink to="/" end className={linkClass}>
+              <Wallet size={16} strokeWidth={2} />
               All Accounts
             </NavLink>
             {accountsError && <p className="sidebar__error">Accounts failed to load: {accountsError}</p>}
@@ -147,6 +199,7 @@ export default function Layout() {
             {!toolsCollapsed &&
               orderedTools.map((tool) => (
                 <NavLink key={tool.key} to={tool.to} className={linkClass}>
+                  <tool.icon size={16} strokeWidth={2} />
                   {tool.label}
                 </NavLink>
               ))}
