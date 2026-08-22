@@ -41,6 +41,14 @@ export default function DailyGainsTable({ account, holdings, trades }) {
   const rangeStart = customRange?.start ?? displayDates[0] ?? ''
   const rangeEnd = customRange?.end ?? displayDates[displayDates.length - 1] ?? ''
 
+  // Calendar days spanned by the picked range (inclusive), not the number of
+  // trading-day columns shown — a Fri-Mon range is 4 calendar days even
+  // though only 2 of those are trading days with their own column.
+  const periodDayCount =
+    rangeStart && rangeEnd
+      ? Math.round((new Date(`${rangeEnd}T00:00:00Z`) - new Date(`${rangeStart}T00:00:00Z`)) / 86_400_000) + 1
+      : null
+
   const { startValue, endValue } = useAccountValueBounds(account, rangeStart, rangeEnd)
   const valueChange = startValue != null && endValue != null ? endValue - startValue : null
   const valueChangePct = valueChange != null && startValue ? (valueChange / startValue) * 100 : null
@@ -94,7 +102,16 @@ export default function DailyGainsTable({ account, holdings, trades }) {
 
   return (
     <div className="chart-card daily-gains">
-      <h3 className="chart-card__title">Gains/Losses for Period</h3>
+      <h3 className="chart-card__title">
+        Gains/Losses for Period
+        {rangeStart && rangeEnd && (
+          <span className="daily-gains__period-range">
+            {' '}
+            ({formatDateHeader(rangeStart)} – {formatDateHeader(rangeEnd)} · {periodDayCount} day
+            {periodDayCount === 1 ? '' : 's'})
+          </span>
+        )}
+      </h3>
 
       <div className="daily-gains__value-summary">
         <div className="daily-gains__value-item">
