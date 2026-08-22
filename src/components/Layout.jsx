@@ -24,6 +24,7 @@ const TOOL_LINKS = [
 const DEFAULT_TOOL_ORDER = TOOL_LINKS.map((t) => t.key)
 const TOOLS_ORDER_KEY = 'portfolio-tracker:tools-order'
 const TOOLS_COLLAPSED_KEY = 'portfolio-tracker:tools-collapsed'
+const SIDEBAR_COLLAPSED_KEY = 'portfolio-tracker:sidebar-collapsed'
 
 function loadToolOrder() {
   try {
@@ -50,6 +51,9 @@ export default function Layout() {
   const [toolsCollapsed, setToolsCollapsed] = useState(
     () => window.localStorage.getItem(TOOLS_COLLAPSED_KEY) === 'true',
   )
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
+  )
 
   useEffect(() => {
     window.localStorage.setItem(TOOLS_ORDER_KEY, JSON.stringify(toolOrder))
@@ -58,6 +62,10 @@ export default function Layout() {
   useEffect(() => {
     window.localStorage.setItem(TOOLS_COLLAPSED_KEY, String(toolsCollapsed))
   }, [toolsCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed))
+  }, [sidebarCollapsed])
 
   const orderedTools = toolOrder.map((key) => TOOL_LINKS.find((t) => t.key === key)).filter(Boolean)
 
@@ -83,56 +91,67 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? 'sidebar--collapsed' : ''}`}>
         <div className="sidebar__brand">
           <span className="sidebar__brand-mark">◆</span>
-          <span className="sidebar__brand-name">Portfolio Tracker</span>
+          {!sidebarCollapsed && <span className="sidebar__brand-name">Portfolio Tracker</span>}
+          <button
+            type="button"
+            className="sidebar__collapse-toggle"
+            onClick={() => setSidebarCollapsed((v) => !v)}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? '»' : '«'}
+          </button>
         </div>
-        <nav className="sidebar__nav">
-          <div className="sidebar__section-header">
-            <p className="sidebar__section-label">Accounts</p>
-            <button
-              className="sidebar__manage-accounts"
-              onClick={() => setShowManageAccounts(true)}
-              title="Manage accounts"
-            >
-              Manage
-            </button>
-          </div>
-          <NavLink to="/" end className={linkClass}>
-            All Accounts
-          </NavLink>
-          {accountsError && <p className="sidebar__error">Accounts failed to load: {accountsError}</p>}
-          {accounts.map((account) => (
-            <NavLink key={account.id} to={`/account/${slugify(account.name)}`} className={linkClass}>
-              {account.name}
+        {!sidebarCollapsed && (
+          <nav className="sidebar__nav">
+            <div className="sidebar__section-header">
+              <p className="sidebar__section-label">Accounts</p>
+              <button
+                className="sidebar__manage-accounts"
+                onClick={() => setShowManageAccounts(true)}
+                title="Manage accounts"
+              >
+                Manage
+              </button>
+            </div>
+            <NavLink to="/" end className={linkClass}>
+              All Accounts
             </NavLink>
-          ))}
-          <div className="sidebar__section-header">
-            <button
-              type="button"
-              className="sidebar__section-toggle"
-              onClick={() => setToolsCollapsed((v) => !v)}
-              aria-expanded={!toolsCollapsed}
-            >
-              <span className={`sidebar__chevron ${toolsCollapsed ? 'is-collapsed' : ''}`}>▾</span>
-              <span className="sidebar__section-label">Tools</span>
-            </button>
-            <button
-              className="sidebar__manage-accounts"
-              onClick={() => setShowManageTools(true)}
-              title="Manage tools order"
-            >
-              Manage
-            </button>
-          </div>
-          {!toolsCollapsed &&
-            orderedTools.map((tool) => (
-              <NavLink key={tool.key} to={tool.to} className={linkClass}>
-                {tool.label}
+            {accountsError && <p className="sidebar__error">Accounts failed to load: {accountsError}</p>}
+            {accounts.map((account) => (
+              <NavLink key={account.id} to={`/account/${slugify(account.name)}`} className={linkClass}>
+                {account.name}
               </NavLink>
             ))}
-        </nav>
+            <div className="sidebar__section-header">
+              <button
+                type="button"
+                className="sidebar__section-toggle"
+                onClick={() => setToolsCollapsed((v) => !v)}
+                aria-expanded={!toolsCollapsed}
+              >
+                <span className={`sidebar__chevron ${toolsCollapsed ? 'is-collapsed' : ''}`}>▾</span>
+                <span className="sidebar__section-label">Tools</span>
+              </button>
+              <button
+                className="sidebar__manage-accounts"
+                onClick={() => setShowManageTools(true)}
+                title="Manage tools order"
+              >
+                Manage
+              </button>
+            </div>
+            {!toolsCollapsed &&
+              orderedTools.map((tool) => (
+                <NavLink key={tool.key} to={tool.to} className={linkClass}>
+                  {tool.label}
+                </NavLink>
+              ))}
+          </nav>
+        )}
       </aside>
       <main className="app-main">
         <Outlet />
