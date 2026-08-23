@@ -85,8 +85,21 @@ export function subscribeTwelveDataQueue(listener) {
 // same single queued request.
 const requestCache = new Map()
 
+// 1M/3M/6M/1Y/20D/50D/200D all differ only in how many trailing daily bars
+// they keep — 200D's outputsize (400) is already a superset of the other
+// six, so useStockQuote always requests the 200D superset from
+// watchlist-quote for any of them and trims client-side. Keying all seven by
+// the same cache entry means switching between them costs one Twelve Data
+// credit total instead of one each. 1D/1W fetch a genuinely different
+// (intraday) interval and keep their own key.
+const DAILY_RANGES = new Set(['1M', '3M', '6M', '1Y', '20D', '50D', '200D'])
+
+function cacheKeyForRange(ticker, range) {
+  return DAILY_RANGES.has(range) ? `${ticker}:daily` : `${ticker}:${range}`
+}
+
 export function fetchWatchlistQuote(ticker, range, invoke) {
-  const key = `${ticker}:${range}`
+  const key = cacheKeyForRange(ticker, range)
   let entry = requestCache.get(key)
   if (!entry) {
     entry = enqueueTwelveDataCall(invoke).catch((err) => {
