@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useAccounts } from '../hooks/useAccounts'
+import { useDateRange } from '../hooks/useDateRange'
 import { slugify } from '../lib/accounts'
 import KPIRow from '../components/KPIRow'
+import BenchmarkComparisonChart from '../components/BenchmarkComparisonChart'
 import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
@@ -11,6 +13,18 @@ import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
 import HoldingsTable from '../components/HoldingsTable'
 import PerformanceEvaluator from '../components/PerformanceEvaluator'
 import DailyGainsTable from '../components/DailyGainsTable'
+
+// Both charts' default range would otherwise be the 'monthly' preset (a
+// 365-day lookback), which for these two accounts lands well before their
+// first deposit — that's exactly the near-zero-starting-value case that
+// blows up simple % change into absurd numbers (see BenchmarkComparisonChart's
+// caveat text). Pinning the default start to when the account was actually
+// funded keeps the initial view meaningful; the user can still pick any
+// other range from the chart's own selector.
+const ACCOUNT_DEFAULT_START_DATES = {
+  Robinhood: '2026-07-18',
+  'Traditional IRA': '2026-07-01',
+}
 
 // Every account page matches the same route (/account/:accountSlug), so
 // React Router reuses one AccountPage instance across tabs instead of
@@ -50,6 +64,9 @@ function AccountPageContent({ accountLabel }) {
   const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio(accountLabel)
   const [showEvaluator, setShowEvaluator] = useState(false)
+  // Shared by both charts below so picking a range or custom date on either
+  // one moves both together — see useDateRange.
+  const dateRange = useDateRange('monthly', ACCOUNT_DEFAULT_START_DATES[accountLabel] ?? null)
 
   return (
     <div className="page">
@@ -69,7 +86,8 @@ function AccountPageContent({ accountLabel }) {
       ) : (
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
-          <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} />
+          <BenchmarkComparisonChart account={accountLabel} title={`${accountLabel} vs. Benchmarks`} dateRange={dateRange} />
+          <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} dateRange={dateRange} />
           <DailyGainsTable account={accountLabel} holdings={holdings} trades={trades} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />

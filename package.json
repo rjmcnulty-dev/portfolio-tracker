@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "prices:fetch": "node scripts/fetch-prices.mjs",
     "portfolio:backfill": "node scripts/backfill-portfolio-history.mjs",
+    "benchmarks:backfill": "node scripts/backfill-benchmark-history.mjs",
     "deposits:materialize": "node scripts/materialize-deposits.mjs",
     "trades:materialize": "node scripts/materialize-trades.mjs"
   },

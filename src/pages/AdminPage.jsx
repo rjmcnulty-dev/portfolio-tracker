@@ -2,6 +2,7 @@ import { useAuth } from '../hooks/useAuth'
 import AdminConfigPage from './AdminConfigPage'
 import AdminSecretsPage from './AdminSecretsPage'
 import AdminTradeTypesPage from './AdminTradeTypesPage'
+import AdminBenchmarksPage from './AdminBenchmarksPage'
 
 export default function AdminPage() {
   const { user, signOut } = useAuth()
@@ -44,6 +45,17 @@ export default function AdminPage() {
           </p>
         </header>
         <AdminTradeTypesPage />
+      </section>
+      <section className="page__section">
+        <header className="page__header">
+          <h2>Benchmarks</h2>
+          <p className="page__subtitle">
+            Market indexes/ETFs shown on the Portfolio Performance chart — add, edit, or remove which ones are
+            available. After adding one, run <code>npm run benchmarks:backfill</code> to pull in its full price
+            history (it accumulates going forward automatically either way).
+          </p>
+        </header>
+        <AdminBenchmarksPage />
       </section>
     </div>
   )

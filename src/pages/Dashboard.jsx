@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { usePortfolio } from '../hooks/usePortfolio'
+import { useDateRange } from '../hooks/useDateRange'
 import KPIRow from '../components/KPIRow'
+import BenchmarkComparisonChart from '../components/BenchmarkComparisonChart'
 import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
@@ -12,6 +14,7 @@ export default function Dashboard() {
   const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio('All')
   const [showEvaluator, setShowEvaluator] = useState(false)
+  const dateRange = useDateRange()
 
   return (
     <div className="page">
@@ -31,7 +34,8 @@ export default function Dashboard() {
       ) : (
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
-          <PortfolioValueChart />
+          <BenchmarkComparisonChart dateRange={dateRange} />
+          <PortfolioValueChart dateRange={dateRange} />
           <div className="chart-grid">
             <AllocationDonut allocation={allocation} />
             <PnLBarChart data={pnlByTicker} />

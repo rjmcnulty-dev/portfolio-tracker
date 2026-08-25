@@ -1,21 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { usePortfolioValueHistory } from '../hooks/usePortfolioValueHistory'
 import { useDeposits } from '../hooks/useDeposits'
 import { useNetDepositsWithdrawals } from '../hooks/useNetDepositsWithdrawals'
-import { useConfigValue } from '../hooks/useAppConfig'
+import { getEffectiveStartDate } from '../lib/rangeFloor'
+import RangeSelector from './RangeSelector'
 import './PortfolioValueChart.css'
-
-// "Daily"/"Monthly"/"Yearly" are lookback windows over the (always
-// daily-granularity) history, not aggregation buckets — matches how Stock
-// Watch's range buttons work. "All Time" has no lower bound. DB-backed via
-// app_config's portfolio_value_ranges — this is the pre-config fallback.
-const DEFAULT_RANGES = [
-  { key: 'daily', label: 'Daily', days: 30 },
-  { key: 'monthly', label: 'Monthly', days: 365 },
-  { key: 'yearly', label: 'Yearly', days: 1825 },
-  { key: 'all', label: 'All Time', days: null },
-]
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -39,7 +29,7 @@ function pctClass(value) {
 
 function formatDateTick(dateStr, days) {
   const d = new Date(`${dateStr}T00:00:00Z`)
-  if (days && days <= 30) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  if (days && days <= 90) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
   if (days && days <= 365) return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 }
@@ -85,13 +75,11 @@ function ValueTooltip({ active, payload, label, title }) {
   )
 }
 
-export default function PortfolioValueChart({ account = 'All', title = 'Portfolio Value' }) {
+export default function PortfolioValueChart({ account = 'All', title = 'Portfolio Value', dateRange }) {
   const { history, loading, error } = usePortfolioValueHistory(account)
   const { deposits } = useDeposits(account)
-  const RANGES = useConfigValue('portfolio_value_ranges', DEFAULT_RANGES)
-  const [rangeKey, setRangeKey] = useState('monthly')
 
-  const range = RANGES.find((r) => r.key === rangeKey)
+  const { startDate, endDate, days } = dateRange
 
   // Multiple deposits landing on the same day are summed into one marker
   // rather than losing all but the last.
@@ -124,16 +112,32 @@ export default function PortfolioValueChart({ account = 'All', title = 'Portfoli
     })
   }, [history, deposits])
 
+  // The Change figure below is computed from the first row in range, so
+  // that row can't be a near-zero pre-funding artifact (a stray test
+  // balance before the real first deposit) — dividing by a near-zero
+  // denominator would blow Change % up to a meaningless number. Clamped
+  // forward to the first date with a "real" value; never earlier than what
+  // was actually requested. See rangeFloor.js.
+  const effectiveStartDate = useMemo(() => getEffectiveStartDate(history, startDate), [history, startDate])
+  const startClamped = Boolean(effectiveStartDate && effectiveStartDate !== startDate)
+
   const data = useMemo(() => {
-    let inRange = historyWithLayers
-    if (range.days) {
-      const cutoff = new Date()
-      cutoff.setUTCDate(cutoff.getUTCDate() - range.days)
-      const cutoffStr = cutoff.toISOString().slice(0, 10)
-      inRange = historyWithLayers.filter((row) => row.snapshot_date >= cutoffStr)
-    }
+    const inRange = historyWithLayers.filter(
+      (row) => (!effectiveStartDate || row.snapshot_date >= effectiveStartDate) && row.snapshot_date <= endDate,
+    )
     return inRange.map((row) => ({ ...row, depositAmount: depositsByDate.get(row.snapshot_date) ?? null }))
-  }, [historyWithLayers, range, depositsByDate])
+  }, [historyWithLayers, effectiveStartDate, endDate, depositsByDate])
+
+  // x-axis tick granularity keyed off the *actual* rendered date span, not
+  // the preset's nominal day-count (dateRange.days) — see the identical
+  // comment in BenchmarkComparisonChart.jsx for why the nominal figure can
+  // overstate the real span once the inception floor clamps it shorter.
+  const actualDays = useMemo(() => {
+    if (data.length < 2) return days
+    const first = new Date(`${data[0].snapshot_date}T00:00:00Z`)
+    const last = new Date(`${data[data.length - 1].snapshot_date}T00:00:00Z`)
+    return Math.round((last - first) / 86_400_000)
+  }, [data, days])
 
   const latest = data.length ? data[data.length - 1].total_value : null
   const first = data.length ? data[0].total_value : null
@@ -180,18 +184,13 @@ export default function PortfolioValueChart({ account = 'All', title = 'Portfoli
               </span>
             </span>
           )}
+          {startClamped && (
+            <p className="portfolio-value-chart__caveat portfolio-value-chart__caveat--clamped">
+              Chart starts {formatDate(effectiveStartDate)} — no meaningful account value before then.
+            </p>
+          )}
         </div>
-        <div className="portfolio-value-chart__ranges">
-          {RANGES.map((r) => (
-            <button
-              key={r.key}
-              className={`portfolio-value-chart__range-btn ${rangeKey === r.key ? 'is-active' : ''}`}
-              onClick={() => setRangeKey(r.key)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <RangeSelector dateRange={dateRange} />
       </div>
 
       <div className="portfolio-value-chart__value-summary">
@@ -252,7 +251,7 @@ export default function PortfolioValueChart({ account = 'All', title = 'Portfoli
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e9ee" />
               <XAxis
                 dataKey="snapshot_date"
-                tickFormatter={(v) => formatDateTick(v, range.days)}
+                tickFormatter={(v) => formatDateTick(v, actualDays)}
                 stroke="var(--text-muted)"
                 fontSize={11}
                 minTickGap={40}

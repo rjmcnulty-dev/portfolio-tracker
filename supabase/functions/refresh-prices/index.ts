@@ -190,17 +190,27 @@ Deno.serve(async (req) => {
       return json({ error: tradesError.message }, 500);
     }
     allTrades = trades ?? [];
-    tickers = [...new Set(allTrades.map((t) => t.ticker).filter(Boolean))];
 
     const { data: deposits, error: depositsError } = await supabase.from("deposits").select("amount, account");
     if (depositsError) {
       return json({ error: depositsError.message }, 500);
     }
     allDeposits = deposits ?? [];
+
+    // Benchmark tickers (e.g. SPY/QQQ/DIA) are never traded, so a full
+    // refresh unions them in here so the comparison chart keeps
+    // accumulating daily history, same as any held ticker. Only on this
+    // branch — a single-ticker "Auto Update" request shouldn't pull in
+    // every benchmark too.
+    const { data: benchmarkRows, error: benchmarksError } = await supabase.from("benchmarks").select("ticker");
+    if (benchmarksError) {
+      return json({ error: benchmarksError.message }, 500);
+    }
+    tickers = [...new Set([...allTrades.map((t) => t.ticker).filter(Boolean), ...(benchmarkRows ?? []).map((b) => b.ticker)])];
   }
 
   if (!tickers.length) {
-    return json({ message: "No tickers found in trades — nothing to fetch.", updated: [] });
+    return json({ message: "No tickers found in trades or benchmarks — nothing to fetch.", updated: [] });
   }
 
   const asOf = new Date().toISOString().slice(0, 10);

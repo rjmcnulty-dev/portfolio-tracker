@@ -113,9 +113,17 @@ async function main() {
   const { data: deposits, error: depositsError } = await supabase.from('deposits').select('amount, account')
   if (depositsError) throw depositsError
 
-  const tickers = [...new Set(trades.map((t) => t.ticker).filter(Boolean))]
+  // Benchmark tickers (e.g. SPY/QQQ/DIA) are never traded, so they'd
+  // otherwise never get a price — union them in here so the comparison
+  // chart's history keeps accumulating daily, same as any held ticker.
+  // They never enter computeQuantitiesByTicker/computeHoldingsValue below
+  // since those only iterate `trades`.
+  const { data: benchmarks, error: benchmarksError } = await supabase.from('benchmarks').select('ticker')
+  if (benchmarksError) throw benchmarksError
+
+  const tickers = [...new Set([...trades.map((t) => t.ticker).filter(Boolean), ...(benchmarks ?? []).map((b) => b.ticker)])]
   if (!tickers.length) {
-    console.log('No tickers found in trades — nothing to fetch.')
+    console.log('No tickers found in trades or benchmarks — nothing to fetch.')
     return
   }
 

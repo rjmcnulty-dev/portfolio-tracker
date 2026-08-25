@@ -1,0 +1,82 @@
+.admin-benchmarks {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+}
+
+.admin-benchmarks__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+}
+
+.admin-benchmarks__table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid #edf0f3;
+}
+
+.admin-benchmarks__table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 14px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.admin-benchmarks__move {
+  display: flex;
+  gap: 2px;
+}
+
+.admin-benchmarks__move .btn-link {
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.admin-benchmarks__swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.admin-benchmarks__ticker {
+  font-weight: 600;
+  color: var(--navy-dark);
+}
+
+.admin-benchmarks__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-benchmarks__actions .btn-link {
+  margin-left: 10px;
+}
+
+.admin-benchmarks__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.admin-benchmarks__add-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.admin-benchmarks__color-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

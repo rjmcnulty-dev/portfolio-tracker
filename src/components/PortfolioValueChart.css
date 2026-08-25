@@ -47,30 +47,11 @@
   color: var(--red);
 }
 
-.portfolio-value-chart__ranges {
-  display: flex;
-  gap: 6px;
-}
-
-.portfolio-value-chart__range-btn {
-  border: 1px solid #d3d9e0;
-  background: #fff;
-  color: var(--text-muted);
-  border-radius: 999px;
-  padding: 4px 12px;
+.portfolio-value-chart__caveat--clamped {
+  margin: 4px 0 0;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.portfolio-value-chart__range-btn:hover {
-  background: var(--surface);
-}
-
-.portfolio-value-chart__range-btn.is-active {
-  background: var(--navy-mid);
-  border-color: var(--navy-mid);
-  color: #fff;
+  color: var(--gold);
+  font-style: italic;
 }
 
 .portfolio-value-chart__value-summary {

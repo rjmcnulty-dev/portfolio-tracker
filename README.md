@@ -584,7 +584,9 @@ npm run portfolio:backfill
 
 `scripts/fetch-prices.mjs` is a small Node script that:
 
-1. Reads the distinct set of tickers currently in `trades`
+1. Reads the distinct set of tickers currently in `trades`, unioned with every ticker in
+   `benchmarks` (see "Benchmarks") — a benchmark ticker is never traded, so it needs the same
+   union to keep getting a daily price
 2. Fetches their latest price from [Twelve Data](https://twelvedata.com/) (free tier: 800
    calls/day)
 3. Upserts them into `ticker_prices`
@@ -1044,6 +1046,73 @@ processes), so each fetches `trade_types` for itself once per invocation via
 `supabase/functions/_shared/tradeTypes.ts` / `scripts/lib/tradeTypes.mjs` — both fall back to
 the original hardcoded `['BUY', 'Scheduled Buy']` set if the table is missing or empty, so
 this was a zero-downtime migration.
+
+## Benchmarks
+
+The **Portfolio Performance** chart (Dashboard and each account page, directly under the KPI
+row) compares an account's simple % change over the selected range against one or more market
+indexes — S&P 500, Nasdaq, Dow Jones, or any other ticker you add. The set of benchmarks is
+DB-backed (`benchmarks` table) and fully editable from `/admin`'s **Benchmarks** tab — add,
+rename, recolor, reorder, or delete any of them, including the three seeded ones. Run once in
+the Supabase SQL editor:
+
+```sql
+create table if not exists benchmarks (
+  ticker text primary key,
+  name text not null,
+  color text not null default '#8b5cf6',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table benchmarks enable row level security;
+create policy "Public read on benchmarks" on benchmarks for select using (true);
+create policy "Authenticated write on benchmarks" on benchmarks
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+insert into benchmarks (ticker, name, color, sort_order) values
+  ('SPY', 'S&P 500', '#2a78d6', 0),
+  ('QQQ', 'Nasdaq', '#8b5cf6', 1),
+  ('DIA', 'Dow Jones', '#F0A500', 2)
+on conflict (ticker) do nothing;
+```
+
+Read stays public (anon) since `scripts/fetch-prices.mjs` and the `refresh-prices` Edge
+Function both need the ticker list without a login, same as `trade_types`; writes require
+`authenticated`. There's no `is_core`/protected-row concept here (unlike `trade_types`) —
+nothing else in the app's calculation logic depends on any specific benchmark ticker
+existing, so every row (including the seeded three) is freely editable and deletable.
+Benchmark tickers are ETF proxies (SPY/QQQ/DIA) rather than raw index symbols, since Twelve
+Data's free tier reliably serves ETF data through the same pipeline already used for held
+positions — raw index symbols aren't confirmed available on the free tier.
+
+**No separate price table** — a benchmark ticker rides the exact same `ticker_prices`/
+`ticker_price_history` tables held positions use; it's simply never referenced by any `trades`
+row. `scripts/fetch-prices.mjs` and the full-refresh branch of the `refresh-prices` Edge
+Function both union `benchmarks.ticker` into their fetch list alongside tickers derived from
+`trades`, so every benchmark's price keeps accumulating daily going forward. A newly-added
+benchmark has no history before the day it was added until you backfill it:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_ANON_KEY=your_anon_key \
+TWELVE_DATA_API_KEY=your_twelve_data_key \
+npm run benchmarks:backfill            # every benchmark
+npm run benchmarks:backfill -- SPY     # just one ticker
+```
+
+Adding a benchmark from `/admin` also immediately calls `refreshOne` for its ticker (the same
+single-ticker path the Prices page's "Auto Update" button uses) so it has at least one real
+price right away, and so a mistyped/unknown ticker is caught and rolled back at add-time
+instead of silently sitting in the table with no price ever.
+
+The chart itself computes **simple % change** — `(value_at_date - value_at_range_start) /
+value_at_range_start`, for the account's `total_value` and for each visible benchmark's price,
+all indexed to the same range-start date — not a deposit/withdrawal-adjusted return. A
+deposit or withdrawal mid-range will make the account's line move for reasons unrelated to its
+holdings' actual performance; the chart says so directly rather than silently implying an
+apples-to-apples comparison. Which benchmarks are currently visible (as opposed to which exist
+in the CRUD list) is a separate, per-browser preference stored in `localStorage`, same pattern
+`Layout.jsx` already uses for sidebar-collapse state.
 
 ## Cash position
 
@@ -1629,6 +1698,8 @@ src/
   hooks/
     useAccounts.js          # Fetch accounts; addAccount() — see "Accounts"
     useTradeTypes.js        # CRUD for trade_types (add/edit/delete custom types) — see "Trade Types"
+    useBenchmarks.js        # CRUD for benchmarks (add/edit/delete indexes to compare against) — see "Benchmarks"
+    useBenchmarkPriceHistory.js # ticker_price_history for a set of benchmark tickers — see "Benchmarks"
     usePasswordRecovery.js  # Detects Supabase's PASSWORD_RECOVERY auth event — see "Password reset"
     useAiCompanion.js       # Chat state + calls ai-companion Edge Function — see "AI Companion"
     useAiUsageTotal.js      # All-time token usage, summed from ai_usage_log — see "Token Usage modal"
@@ -1647,6 +1718,7 @@ src/
     Layout.jsx            # Sidebar nav (incl. Add Account) + main content outlet
     AddAccountForm.jsx     # Add-account modal, opened from the sidebar's "+"
     KPIRow.jsx             # 6 stat cards (cash position, invested, mkt value, unrealized, realized, total P&L)
+    BenchmarkComparisonChart.jsx # Account vs. selected indexes, simple % change — see "Benchmarks"
     AllocationDonut.jsx    # Recharts PieChart, market value % by ticker
     PnLBarChart.jsx        # Recharts horizontal BarChart, realized vs unrealized by ticker
     HoldingsSummaryTable.jsx # Per-stock position summary: qty, avg cost, current price, unrealized $/%
@@ -1678,11 +1750,13 @@ src/
     AdminConfigPage.jsx      # App Settings tab: app_config rows grouped by category, shape-aware form editor
     AdminSecretsPage.jsx     # Secrets tab: masked API key entry (Twelve Data/Finnhub/Anthropic) — see "Encrypted secrets"
     AdminTradeTypesPage.jsx  # Trade Types tab: add/edit/delete custom trade types — see "Trade Types"
+    AdminBenchmarksPage.jsx  # Benchmarks tab: add/edit/delete/reorder comparison indexes — see "Benchmarks"
     AiCompanionPage.jsx      # Chat with Claude, portfolio-aware (/ai-companion) — see "AI Companion"
 scripts/
   fetch-prices.mjs          # Daily job: Twelve Data -> ticker_prices (see "Daily price refresh")
   materialize-deposits.mjs  # Daily job: deposit_schedules -> deposits (see "Recurring deposits")
   materialize-trades.mjs    # Weekday job: trade_schedules + ticker_prices -> trades (see "Recurring trades")
+  backfill-benchmark-history.mjs # One-time/occasional: Twelve Data full history -> ticker_price_history for a benchmark — see "Benchmarks"
   lib/
     config.mjs               # getConfig() — reads app_config, shared by the scripts above
     secrets.mjs               # getSecret() — calls reveal-secret, see "Encrypted secrets"

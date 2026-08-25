@@ -1,0 +1,136 @@
+.benchmark-chart {
+  margin-bottom: 16px;
+}
+
+.benchmark-chart__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.benchmark-chart__caveat {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+
+.benchmark-chart__caveat--clamped {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.benchmark-chart__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.benchmark-chart__mode-toggle {
+  display: flex;
+  border: 1px solid #d3d9e0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.benchmark-chart__mode-btn {
+  border: none;
+  background: #fff;
+  color: var(--text-muted);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.benchmark-chart__mode-btn.is-active {
+  background: var(--navy-mid);
+  color: #fff;
+}
+
+.benchmark-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.benchmark-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.benchmark-chart__legend-item--account {
+  font-weight: 600;
+}
+
+.benchmark-chart__legend-item--toggle {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.benchmark-chart__legend-item--toggle:hover {
+  border-color: #d3d9e0;
+}
+
+.benchmark-chart__legend-item--toggle.is-hidden {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.benchmark-chart__legend-item--toggle.is-hidden .benchmark-chart__legend-swatch {
+  opacity: 0.4;
+}
+
+.benchmark-chart__legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.benchmark-chart__legend-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.benchmark-chart__tooltip {
+  background: var(--navy-mid);
+  border-radius: 8px;
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.benchmark-chart__tooltip-label {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.benchmark-chart__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.benchmark-chart__tooltip-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
