@@ -268,9 +268,11 @@ create table if not exists deposit_schedules (
   start_date date not null,
   end_date date,
   active boolean not null default true,
-  deposit_type text not null default 'Cash Deposit' check (
-    deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
-  ),
+  -- No check constraint — the allowed values are the app_config
+  -- deposit_types list (see "App settings"), freely editable from /admin
+  -- without a schema change. A hardcoded check here would silently reject
+  -- any type added after this table was created.
+  deposit_type text not null default 'Cash Deposit',
   notes text,
   created_at timestamptz not null default now()
 );
@@ -288,9 +290,11 @@ create table if not exists deposits (
   account text not null references accounts (name) on update cascade,
   amount numeric not null,
   deposit_date date not null,
-  deposit_type text not null default 'Cash Deposit' check (
-    deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
-  ),
+  -- No check constraint — the allowed values are the app_config
+  -- deposit_types list (see "App settings"), freely editable from /admin
+  -- without a schema change. A hardcoded check here would silently reject
+  -- any type added after this table was created.
+  deposit_type text not null default 'Cash Deposit',
   schedule_id uuid references deposit_schedules (id) on delete set null,
   notes text,
   created_at timestamptz not null default now()
@@ -453,14 +457,19 @@ create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for 
 
 ```sql
 alter table deposits add column if not exists deposit_type text not null default 'Cash Deposit';
-alter table deposits add constraint deposits_type_check check (
-  deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
-);
-
 alter table deposit_schedules add column if not exists deposit_type text not null default 'Cash Deposit';
-alter table deposit_schedules add constraint deposit_schedules_type_check check (
-  deposit_type in ('Cash Deposit', 'Rollover', 'Short Term Capital Gain', 'Long Term Capital Gain', 'Dividend')
-);
+```
+
+**If you already have a database with the old hardcoded `deposit_type` check constraint**
+(any database from before this note — the constraint used to ship alongside the column
+above), drop it. Without this, adding a custom type to `app_config`'s `deposit_types` list
+from `/admin` looks like it worked, but saving a deposit with that type fails with `violates
+check constraint "deposits_type_check"`, since the old fixed list is still enforced
+underneath — same class of bug `trade_types` hit before that migration below:
+
+```sql
+alter table deposits drop constraint if exists deposits_type_check;
+alter table deposit_schedules drop constraint if exists deposit_schedules_type_check;
 ```
 
 **If you already have a database from before "Scheduled Buy"**, run the migration below to
