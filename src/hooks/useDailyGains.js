@@ -5,6 +5,20 @@ import { useConfigValue } from './useAppConfig'
 
 const DEFAULT_DAILY_GAINS_DEFAULTS = { defaultDayCount: 5, weekSize: 5 }
 
+// Generous lookback for the price-history fetch below — covers the default
+// view, every Week-dropdown option, and most custom ranges without ever
+// approaching PostgREST's 1000-row default cap on an unbounded query. That
+// cap used to be a non-issue here since ticker_price_history stayed small,
+// but a ticker held here that's *also* a benchmark (see BenchmarkComparisonChart)
+// can now carry years of backfilled history — an unbounded ascending query
+// across several held tickers would silently return only the oldest rows
+// (that ticker's ancient history) and drop every recent price for
+// everything, held ticker included.
+const LOOKBACK_DAYS = 400
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 // Day-by-day $ / % change per ticker, as a matrix: one row per ticker, one
 // column per trading day. `range` is either null (default: the 5 most
 // recent trading days with data) or `{ start, end }` (inclusive 'YYYY-MM-DD'
@@ -38,6 +52,16 @@ export function useDailyGains(holdings, trades, range) {
   const tickers = useMemo(() => holdings.map((h) => h.ticker).sort(), [holdings])
   const tickersKey = tickers.join(',')
 
+  // Extends back far enough to cover an explicit custom range that reaches
+  // further than the default lookback (e.g. an account held since before
+  // that window) — otherwise just the flat default.
+  const fromDate = useMemo(() => {
+    const cutoff = new Date(`${todayStr()}T00:00:00Z`)
+    cutoff.setUTCDate(cutoff.getUTCDate() - LOOKBACK_DAYS)
+    const defaultFrom = cutoff.toISOString().slice(0, 10)
+    return range?.start && range.start < defaultFrom ? range.start : defaultFrom
+  }, [range])
+
   useEffect(() => {
     if (!tickers.length) {
       setHistoryByTicker({})
@@ -54,6 +78,7 @@ export function useDailyGains(holdings, trades, range) {
         .from('ticker_price_history')
         .select('ticker, as_of, price')
         .in('ticker', tickers)
+        .gte('as_of', fromDate)
         .order('as_of', { ascending: true })
 
       if (ignore) return
@@ -78,7 +103,7 @@ export function useDailyGains(holdings, trades, range) {
       ignore = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickersKey])
+  }, [tickersKey, fromDate])
 
   // Per-ticker, chronologically sorted (date, signed quantity delta) events
   // — used to replay "how many shares were held before this date's own
