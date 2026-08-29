@@ -175,7 +175,12 @@ Deno.serve(async (req) => {
   try {
     const [series, earningsCalendar, profile] = await Promise.all([
       fetchSeries(ticker, range, twelveDataApiKey),
-      fetchEarningsCalendar(ticker, finnhubApiKey),
+      // A ticker with no earnings calendar at all (a mutual fund like
+      // BDSIX, an ETF, etc.) makes Finnhub 403 rather than return an empty
+      // list — that's expected for those tickers, not a real failure, and
+      // shouldn't block the price chart itself. Same "supplementary info,
+      // degrade gracefully" treatment as fetchCompanyProfile below.
+      fetchEarningsCalendar(ticker, finnhubApiKey).catch(() => []),
       fetchCompanyProfile(ticker, finnhubApiKey).catch(() => ({
         companyName: null,
         floatShares: null,
