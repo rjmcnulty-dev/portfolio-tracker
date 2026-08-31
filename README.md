@@ -1349,6 +1349,24 @@ Only **adding** accounts is supported for now — no rename or delete UI yet (de
 with existing trades/deposits attached needs a real decision about what happens to that
 data, so it's deferred rather than half-built).
 
+### Below-KPI tabs
+
+Dashboard and every account page render the same seven cards below the KPI row —
+Benchmarks, Value, Daily Gains, Charts (Allocation Donut + Realized vs Unrealized bar
+chart), Holdings, Realized P&L, Trade Detail — as tabs (`AccountTabs.jsx`) instead of one
+long vertical stack. Only the active tab's component actually mounts; switching tabs
+unmounts the previous one rather than just hiding it, so a card's data hook doesn't fetch
+until you actually look at it.
+
+Which tabs are visible and which one is active is **one shared setting** across Dashboard
+and every account page (`useAccountTabSelection.js`, `localStorage` key
+`portfolio-tracker:account-tabs`) — hiding a tab or switching the active one from any page
+applies everywhere. Toggling a tab's visibility from the **Customize** panel is live for the
+current session immediately; **Set as Default** is a separate, explicit action that persists
+the current visible-tabs set and active tab as what the page opens to next time (and on
+every other account). At least one tab must always stay visible. With nothing saved yet,
+every tab is visible and Benchmarks is active.
+
 ## Admin / Auth
 
 `/admin` is a login-gated section for app configuration (business settings now, encrypted
@@ -1722,6 +1740,8 @@ src/
     useTradeTypes.js        # CRUD for trade_types (add/edit/delete custom types) — see "Trade Types"
     useBenchmarks.js        # CRUD for benchmarks (add/edit/delete indexes to compare against) — see "Benchmarks"
     useBenchmarkPriceHistory.js # ticker_price_history for a set of benchmark tickers — see "Benchmarks"
+    useDateRange.js         # Shared preset/custom date range for the Benchmarks + Value charts — see "Benchmarks"
+    useAccountTabSelection.js # Which below-KPI tabs are visible/active, shared across pages — see "Below-KPI tabs"
     usePasswordRecovery.js  # Detects Supabase's PASSWORD_RECOVERY auth event — see "Password reset"
     useAiCompanion.js       # Chat state + calls ai-companion Edge Function — see "AI Companion"
     useAiUsageTotal.js      # All-time token usage, summed from ai_usage_log — see "Token Usage modal"
@@ -1740,7 +1760,8 @@ src/
     Layout.jsx            # Sidebar nav (incl. Add Account) + main content outlet
     AddAccountForm.jsx     # Add-account modal, opened from the sidebar's "+"
     KPIRow.jsx             # 6 stat cards (cash position, invested, mkt value, unrealized, realized, total P&L)
-    BenchmarkComparisonChart.jsx # Account vs. selected indexes, simple % change — see "Benchmarks"
+    AccountTabs.jsx        # Tabs the below-KPI cards, plus the Customize/Set as Default panel — see "Below-KPI tabs"
+    BenchmarkComparisonChart.jsx # Account vs. selected indexes, compounded deposit-adjusted return — see "Benchmarks"
     AllocationDonut.jsx    # Recharts PieChart, market value % by ticker
     PnLBarChart.jsx        # Recharts horizontal BarChart, realized vs unrealized by ticker
     HoldingsSummaryTable.jsx # Per-stock position summary: qty, avg cost, current price, unrealized $/%

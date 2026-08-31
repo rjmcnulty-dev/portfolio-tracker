@@ -5,6 +5,7 @@ import { useAccounts } from '../hooks/useAccounts'
 import { useDateRange } from '../hooks/useDateRange'
 import { slugify } from '../lib/accounts'
 import KPIRow from '../components/KPIRow'
+import AccountTabs from '../components/AccountTabs'
 import BenchmarkComparisonChart from '../components/BenchmarkComparisonChart'
 import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
@@ -87,25 +88,67 @@ function AccountPageContent({ accountLabel }) {
       ) : (
         <>
           <KPIRow kpis={kpis} cashPosition={cashPosition} />
-          <BenchmarkComparisonChart account={accountLabel} title={`${accountLabel} vs. Benchmarks`} dateRange={dateRange} />
-          <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} dateRange={dateRange} />
-          <DailyGainsTable account={accountLabel} holdings={holdings} trades={trades} />
-          <div className="chart-grid">
-            <AllocationDonut allocation={allocation} />
-            <PnLBarChart data={pnlByTicker} />
-          </div>
-          <section className="page__section">
-            <h2>Holdings</h2>
-            <HoldingsSummaryTable holdings={holdings} />
-          </section>
-          <section className="page__section">
-            <h2>Realized P&L</h2>
-            <RealizedPnLTable trades={trades} />
-          </section>
-          <section className="page__section">
-            <h2>Trade Detail</h2>
-            <HoldingsTable trades={trades} onDelete={deleteTrade} />
-          </section>
+          <AccountTabs
+            tabs={[
+              {
+                key: 'benchmarks',
+                label: 'Benchmarks',
+                render: () => (
+                  <BenchmarkComparisonChart account={accountLabel} title={`${accountLabel} vs. Benchmarks`} dateRange={dateRange} />
+                ),
+              },
+              {
+                key: 'value',
+                label: 'Value',
+                render: () => <PortfolioValueChart account={accountLabel} title={`${accountLabel} Value`} dateRange={dateRange} />,
+              },
+              {
+                key: 'dailyGains',
+                label: 'Daily Gains',
+                render: () => <DailyGainsTable account={accountLabel} holdings={holdings} trades={trades} />,
+              },
+              {
+                key: 'charts',
+                label: 'Charts',
+                render: () => (
+                  <div className="chart-grid">
+                    <AllocationDonut allocation={allocation} />
+                    <PnLBarChart data={pnlByTicker} />
+                  </div>
+                ),
+              },
+              {
+                key: 'holdings',
+                label: 'Holdings',
+                render: () => (
+                  <section className="page__section">
+                    <h2>Holdings</h2>
+                    <HoldingsSummaryTable holdings={holdings} />
+                  </section>
+                ),
+              },
+              {
+                key: 'realizedPnl',
+                label: 'Realized P&L',
+                render: () => (
+                  <section className="page__section">
+                    <h2>Realized P&L</h2>
+                    <RealizedPnLTable trades={trades} />
+                  </section>
+                ),
+              },
+              {
+                key: 'tradeDetail',
+                label: 'Trade Detail',
+                render: () => (
+                  <section className="page__section">
+                    <h2>Trade Detail</h2>
+                    <HoldingsTable trades={trades} onDelete={deleteTrade} />
+                  </section>
+                ),
+              },
+            ]}
+          />
         </>
       )}
 
