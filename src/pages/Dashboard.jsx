@@ -7,6 +7,7 @@ import PortfolioValueChart from '../components/PortfolioValueChart'
 import AllocationDonut from '../components/AllocationDonut'
 import PnLBarChart from '../components/PnLBarChart'
 import HoldingsSummaryTable from '../components/HoldingsSummaryTable'
+import RealizedPnLTable from '../components/RealizedPnLTable'
 import HoldingsTable from '../components/HoldingsTable'
 import PerformanceEvaluator from '../components/PerformanceEvaluator'
 
@@ -43,6 +44,10 @@ export default function Dashboard() {
           <section className="page__section">
             <h2>Holdings</h2>
             <HoldingsSummaryTable holdings={holdings} />
+          </section>
+          <section className="page__section">
+            <h2>Realized P&L</h2>
+            <RealizedPnLTable trades={trades} />
           </section>
           <section className="page__section">
             <h2>Trade Detail</h2>

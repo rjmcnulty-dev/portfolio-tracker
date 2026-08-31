@@ -994,6 +994,19 @@ delete button will show an error telling you to delete the related SELL trade(s)
 deleting it out from under an already-computed realized P&L would silently corrupt that
 number.
 
+**Realized P&L** (Dashboard and each account page, between Holdings and Trade Detail) lists
+every SELL as its own row — ticker, sell date, quantity, proceeds, cost basis, realized
+$/% — rather than collapsing same-ticker sales into one line, since *when* a gain/loss was
+realized is exactly what a per-ticker rollup would lose. It's a read-only view over trades
+already in scope (`RealizedPnLTable`, filtering `trades` to `trade_type === 'SELL'`), not a
+new query or table. Proceeds is `quantity * price − fees`; cost basis is derived as
+`proceeds − realized_pnl` rather than read from `trades.cost_basis` — that column holds the
+same qty*price+fees formula used for a BUY on a SELL row too, unrelated to the cost basis of
+whichever lot(s) the sale actually closed. Sorted by ticker then date, with a totals row.
+This is a different, complementary view from the KPI row's Realized P&L stat and the
+Realized vs Unrealized P&L bar chart (both unchanged, still aggregate-only) — this table is
+the transaction-level detail behind those totals.
+
 ## Trade Types
 
 BUY, SELL, and Scheduled Buy are **core** trade types — permanently protected, since
@@ -1731,6 +1744,7 @@ src/
     AllocationDonut.jsx    # Recharts PieChart, market value % by ticker
     PnLBarChart.jsx        # Recharts horizontal BarChart, realized vs unrealized by ticker
     HoldingsSummaryTable.jsx # Per-stock position summary: qty, avg cost, current price, unrealized $/%
+    RealizedPnLTable.jsx   # One row per SELL: ticker, date, proceeds, cost basis, realized $/% — see "Realized P&L / lot matching"
     HoldingsTable.jsx      # Sortable table, all trade columns, account badge + Source badge in All view
     TradeForm.jsx          # Add/edit trade modal; Cost Basis auto-calculates from qty * price + fees
     TradeScheduleForm.jsx  # Add/edit recurring trade schedule modal (dollar amount, not share count)
