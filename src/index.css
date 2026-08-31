@@ -560,6 +560,16 @@ label {
   font-weight: 600;
 }
 
+/* A label wrapping a checkbox needs the checkbox beside its text, not
+   stacked above it like a normal text-input label — every checkbox+label
+   pair in this app has needed its own one-off row-direction override until
+   now (see AdminTradeTypesPage.css, HoldingsTable.css); this covers all of
+   them, present and future, at the source instead of per-component. */
+label:has(input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+
 input,
 select,
 textarea {

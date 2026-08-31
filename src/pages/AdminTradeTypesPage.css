@@ -68,9 +68,6 @@
 }
 
 .admin-trade-types__checkbox-label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
   gap: 6px;
   font-size: 13px;
   font-weight: 400;
