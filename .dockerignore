@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+.vscode
+.idea
+README.md
+SESSION.md
+DOTNET_MIGRATION.md

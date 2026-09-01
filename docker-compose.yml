@@ -1,0 +1,11 @@
+services:
+  portfolio-tracker:
+    build:
+      context: .
+      args:
+        # docker compose auto-loads ./.env for variable substitution here —
+        # these become build-time-only args (see Dockerfile), not container env.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    ports:
+      - "8080:80"
