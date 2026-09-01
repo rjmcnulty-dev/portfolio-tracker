@@ -10,8 +10,15 @@ export default function AccountTabs({ tabs }) {
   const allTabKeys = useMemo(() => tabs.map((t) => t.key), [tabs])
   const { visibleTabs, activeTab, setActiveTab, toggleTabHidden, setAsDefault } = useAccountTabSelection(allTabKeys)
   const [showCustomize, setShowCustomize] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
 
   const activeTabDef = tabs.find((t) => t.key === activeTab)
+
+  function handleSetAsDefault() {
+    setAsDefault()
+    setJustSaved(true)
+    setTimeout(() => setJustSaved(false), 1500)
+  }
 
   return (
     <div className="account-tabs">
@@ -31,35 +38,31 @@ export default function AccountTabs({ tabs }) {
             ))}
         </div>
 
-        <div className="account-tabs__customize">
-          <button type="button" className="btn-link" onClick={() => setShowCustomize((v) => !v)}>
-            Customize
+        <div className="account-tabs__actions">
+          <button type="button" className="btn-link" onClick={handleSetAsDefault}>
+            {justSaved ? 'Saved!' : 'Set as Default'}
           </button>
-          {showCustomize && (
-            <div className="account-tabs__panel">
-              <p className="account-tabs__panel-title">Show tabs</p>
-              {tabs.map((t) => (
-                <label key={t.key} className="account-tabs__panel-item">
-                  <input type="checkbox" checked={visibleTabs.includes(t.key)} onChange={() => toggleTabHidden(t.key)} />
-                  {t.label}
-                </label>
-              ))}
-              <button
-                type="button"
-                className="btn btn--primary account-tabs__set-default"
-                onClick={() => {
-                  setAsDefault()
-                  setShowCustomize(false)
-                }}
-              >
-                Set as Default
-              </button>
-              <p className="account-tabs__panel-hint">
-                Shown/hidden tabs apply right away — Set as Default saves this setup (and the active tab) for next
-                time, same across Dashboard and every account.
-              </p>
-            </div>
-          )}
+
+          <div className="account-tabs__customize">
+            <button type="button" className="btn-link" onClick={() => setShowCustomize((v) => !v)}>
+              Customize
+            </button>
+            {showCustomize && (
+              <div className="account-tabs__panel">
+                <p className="account-tabs__panel-title">Select cards</p>
+                {tabs.map((t) => (
+                  <label key={t.key} className="account-tabs__panel-item">
+                    <input type="checkbox" checked={visibleTabs.includes(t.key)} onChange={() => toggleTabHidden(t.key)} />
+                    {t.label}
+                  </label>
+                ))}
+                <p className="account-tabs__panel-hint">
+                  Applies right away, same across Dashboard and every account. Use "Set as Default" (next to
+                  Customize) to also pin whichever tab is active now as the one that opens first next time.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

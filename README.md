@@ -1358,14 +1358,20 @@ long vertical stack. Only the active tab's component actually mounts; switching 
 unmounts the previous one rather than just hiding it, so a card's data hook doesn't fetch
 until you actually look at it.
 
-Which tabs are visible and which one is active is **one shared setting** across Dashboard
-and every account page (`useAccountTabSelection.js`, `localStorage` key
-`portfolio-tracker:account-tabs`) — hiding a tab or switching the active one from any page
-applies everywhere. Toggling a tab's visibility from the **Customize** panel is live for the
-current session immediately; **Set as Default** is a separate, explicit action that persists
-the current visible-tabs set and active tab as what the page opens to next time (and on
-every other account). At least one tab must always stay visible. With nothing saved yet,
-every tab is visible and Benchmarks is active.
+Which tabs are selected and which one opens by default is **one shared setting** across
+Dashboard and every account page (`useAccountTabSelection.js`, `localStorage` key
+`portfolio-tracker:account-tabs`), but the two are independent:
+
+- **Customize**'s checkboxes select which cards appear as tabs at all — a plain toggle, same
+  as any other preference in this app (e.g. the benchmark chart's hidden-tickers toggle):
+  checking/unchecking one takes effect immediately and persists right away, no extra save
+  step. At least one tab must always stay selected.
+- **Set as Default** (next to Customize) only pins whichever tab happens to be active *right
+  now* as the one that opens first on a future visit — it never touches which tabs are
+  selected. Clicking between tabs during a session changes what's active without affecting
+  this at all; it only updates when you explicitly click Set as Default again.
+
+With nothing saved yet, every tab is selected and Benchmarks opens by default.
 
 ## Admin / Auth
 

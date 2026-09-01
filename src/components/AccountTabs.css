@@ -38,6 +38,12 @@
   color: #fff;
 }
 
+.account-tabs__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .account-tabs__customize {
   position: relative;
 }
@@ -70,12 +76,6 @@
   font-size: 13px;
   color: var(--text-primary);
   font-weight: 400;
-}
-
-.account-tabs__set-default {
-  width: 100%;
-  margin-top: 10px;
-  text-align: center;
 }
 
 .account-tabs__panel-hint {

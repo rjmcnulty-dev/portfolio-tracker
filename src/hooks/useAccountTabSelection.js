@@ -11,29 +11,43 @@ function loadSaved() {
   }
 }
 
+function persist(partial) {
+  try {
+    const current = loadSaved() ?? {}
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...current, ...partial }))
+  } catch {
+    // Private browsing / storage disabled — selection still works for this
+    // session, it just won't persist.
+  }
+}
+
 // One shared setting across Dashboard and every account page (same
-// STORAGE_KEY regardless of which page's AccountTabs instance is asking) —
-// hide/show which of the below-KPI cards appear as tabs, and which tab is
-// active, both live for the current session immediately. Persisting either
-// past a reload only happens on an explicit setAsDefault() call, so
-// toggling a tab's visibility while exploring doesn't silently overwrite
-// what loads next time.
+// STORAGE_KEY regardless of which page's AccountTabs instance is asking).
+// Two independent things live here, saved differently on purpose:
+//   - hiddenTabs: which cards are selected to appear as tabs at all.
+//     A toggle, same as any other preference in this app (e.g. the
+//     benchmark chart's hidden-tickers toggle) — persists immediately,
+//     no separate save step.
+//   - defaultActiveTab: which tab opens first on a future visit. Only
+//     changes when setAsDefault() is explicitly called — clicking between
+//     tabs during a session changes what's active *right now* without
+//     touching this at all.
 export function useAccountTabSelection(allTabKeys) {
   const [hiddenTabs, setHiddenTabs] = useState(() => {
     const saved = loadSaved()
     return new Set((saved?.hiddenTabs ?? []).filter((k) => allTabKeys.includes(k)))
   })
 
+  const visibleTabs = useMemo(() => allTabKeys.filter((k) => !hiddenTabs.has(k)), [allTabKeys, hiddenTabs])
+
   const [activeTab, setActiveTabState] = useState(() => {
     const saved = loadSaved()
     const savedHidden = new Set(saved?.hiddenTabs ?? [])
-    if (saved?.activeTab && allTabKeys.includes(saved.activeTab) && !savedHidden.has(saved.activeTab)) {
-      return saved.activeTab
+    if (saved?.defaultActiveTab && allTabKeys.includes(saved.defaultActiveTab) && !savedHidden.has(saved.defaultActiveTab)) {
+      return saved.defaultActiveTab
     }
     return allTabKeys.find((k) => !savedHidden.has(k)) ?? allTabKeys[0]
   })
-
-  const visibleTabs = useMemo(() => allTabKeys.filter((k) => !hiddenTabs.has(k)), [allTabKeys, hiddenTabs])
 
   function setActiveTab(key) {
     if (visibleTabs.includes(key)) setActiveTabState(key)
@@ -41,31 +55,28 @@ export function useAccountTabSelection(allTabKeys) {
 
   function toggleTabHidden(key) {
     setHiddenTabs((prev) => {
+      let next
       if (prev.has(key)) {
-        const next = new Set(prev)
+        next = new Set(prev)
         next.delete(key)
-        return next
+      } else {
+        // At least one tab must stay visible/selectable.
+        if (allTabKeys.length - prev.size <= 1) return prev
+        next = new Set(prev)
+        next.add(key)
+        if (activeTab === key) {
+          const fallback = allTabKeys.find((k) => k !== key && !next.has(k))
+          if (fallback) setActiveTabState(fallback)
+        }
       }
-      // At least one tab must stay visible/selectable.
-      if (allTabKeys.length - prev.size <= 1) return prev
-      const next = new Set(prev)
-      next.add(key)
-      if (activeTab === key) {
-        const fallback = allTabKeys.find((k) => k !== key && !next.has(k))
-        if (fallback) setActiveTabState(fallback)
-      }
+      persist({ hiddenTabs: [...next] })
       return next
     })
   }
 
   function setAsDefault() {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ hiddenTabs: [...hiddenTabs], activeTab }))
-    } catch {
-      // Private browsing / storage disabled — customization still works for
-      // this session, it just won't persist as the default.
-    }
+    persist({ defaultActiveTab: activeTab })
   }
 
-  return { visibleTabs, activeTab, setActiveTab, hiddenTabs, toggleTabHidden, setAsDefault }
+  return { visibleTabs, activeTab, setActiveTab, toggleTabHidden, setAsDefault }
 }
