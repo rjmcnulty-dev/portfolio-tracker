@@ -2,8 +2,10 @@ name: Materialize Recurring Deposits
 
 on:
   schedule:
-    # 06:00 UTC, every day (deposits can be daily, unlike prices which only need weekdays)
-    - cron: '0 6 * * *'
+    # 06:12 UTC, every day (deposits can be daily, unlike prices which only need weekdays).
+    # Deliberately not on the hour — see refresh-prices.yml's cron comment
+    # for why (GitHub deprioritizes top-of-the-hour scheduled runs).
+    - cron: '12 6 * * *'
   workflow_dispatch:
 
 jobs:

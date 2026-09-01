@@ -2,8 +2,11 @@ name: Refresh Stock Prices
 
 on:
   schedule:
-    # 21:00 UTC, weekdays — shortly after the US market close (4pm ET)
-    - cron: '0 21 * * 1-5'
+    # 21:17 UTC, weekdays — shortly after the US market close (4pm ET).
+    # Deliberately not on the hour: GitHub Actions deprioritizes scheduled
+    # workflows queued at the top of the hour under load, which is what was
+    # causing this job's delays to grow from minutes to multiple hours.
+    - cron: '17 21 * * 1-5'
   workflow_dispatch:
 
 jobs:
