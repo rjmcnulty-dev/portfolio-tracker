@@ -31,6 +31,11 @@ function pctClass(value) {
   return value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : ''
 }
 
+function formatOscillator(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  return value.toFixed(1)
+}
+
 // Persists the last successful run per scope (title is "All Accounts" or an
 // account label — stable and distinct per modal instance) so closing and
 // reopening the modal — or a page refresh — can show it again via "Show Last
@@ -213,6 +218,7 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
                     <th className="is-numeric">6mo</th>
                     <th className="is-numeric">12mo</th>
                     <th>Trend</th>
+                    <th className="is-numeric">%K</th>
                     <th>Suggestion</th>
                   </tr>
                 </thead>
@@ -228,6 +234,7 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
                       <td className={`is-numeric ${pctClass(row.returns?.['6m'])}`}>{formatPct(row.returns?.['6m'])}</td>
                       <td className={`is-numeric ${pctClass(row.returns?.['12m'])}`}>{formatPct(row.returns?.['12m'])}</td>
                       <td>{row.trend}</td>
+                      <td className="is-numeric">{formatOscillator(row.stochK)}</td>
                       <td>
                         <span
                           className={`performance-evaluator__badge performance-evaluator__badge--${row.suggestion.toLowerCase()}`}

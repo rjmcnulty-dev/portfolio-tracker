@@ -28,8 +28,9 @@ const MUTED_HEX = '6B7280'
 const DISCLAIMER =
   'A rule of thumb combining your price targets with SMA20/50/200 trend and support/resistance — not investment advice.'
 
-const COLUMNS = ['Ticker', 'Price', 'Target', 'Upside', '1mo', '3mo', '6mo', '12mo', 'Trend', 'Suggestion', 'Reasons']
-const SUGGESTION_COLUMN_INDEX = 9
+const COLUMNS = ['Ticker', 'Price', 'Target', 'Upside', '1mo', '3mo', '6mo', '12mo', 'Trend', '%K', 'Suggestion', 'Reasons']
+const SUGGESTION_COLUMN_INDEX = 10
+const REASONS_COLUMN_INDEX = 11
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -40,6 +41,11 @@ function formatCurrency(value) {
 function formatPct(value) {
   if (value == null || Number.isNaN(Number(value))) return '—'
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+}
+
+function formatOscillator(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—'
+  return value.toFixed(1)
 }
 
 function suggestionColor(suggestion, palette) {
@@ -59,6 +65,7 @@ function rowToCells(row) {
     formatPct(row.returns?.['6m']),
     formatPct(row.returns?.['12m']),
     row.trend,
+    formatOscillator(row.stochK),
     row.suggestion,
     row.reasons.join('; '),
   ]
@@ -99,7 +106,7 @@ export function exportPerformanceEvaluatorPdf(rows, title) {
     body: rows.map(rowToCells),
     styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
     headStyles: { fillColor: NAVY_RGB, textColor: 255 },
-    columnStyles: { [SUGGESTION_COLUMN_INDEX]: { fontStyle: 'bold' }, 10: { cellWidth: 80 } },
+    columnStyles: { [SUGGESTION_COLUMN_INDEX]: { fontStyle: 'bold' }, [REASONS_COLUMN_INDEX]: { cellWidth: 80 } },
     didParseCell(data) {
       if (data.section === 'body' && data.column.index === SUGGESTION_COLUMN_INDEX) {
         data.cell.styles.textColor = suggestionColor(data.cell.raw, { green: GREEN_RGB, red: RED_RGB, muted: MUTED_RGB })
