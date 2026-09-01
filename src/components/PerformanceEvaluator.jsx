@@ -108,8 +108,11 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
   const estimatedMinutes = Math.ceil(holdings.length / rateLimit.maxPerWindow) - 1
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal performance-evaluator" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-overlay">
+      {/* No close-on-overlay-click here (unlike other modals) — a run can take
+          several rate-limited minutes and burn real API credits, so an
+          accidental outside click shouldn't be able to discard it. */}
+      <div className="modal performance-evaluator">
         <div className="performance-evaluator__header">
           <h2 className="modal__title">Performance Evaluator{title ? ` — ${title}` : ''}</h2>
           <button className="btn-link" onClick={onClose}>
