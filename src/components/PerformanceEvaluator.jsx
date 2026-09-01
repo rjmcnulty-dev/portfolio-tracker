@@ -31,6 +31,33 @@ function pctClass(value) {
   return value > 0 ? 'is-positive' : value < 0 ? 'is-negative' : ''
 }
 
+// Persists the last successful run per scope (title is "All Accounts" or an
+// account label — stable and distinct per modal instance) so closing and
+// reopening the modal — or a page refresh — can show it again via "Show Last
+// Evaluation" without spending another rate-limited API run. Browser-local
+// only, not synced anywhere; wrapped in try/catch since localStorage can
+// throw (private browsing, quota) and losing this cache is never fatal.
+function lastEvaluationKey(title) {
+  return `performance-evaluator-last:${title ?? 'default'}`
+}
+
+function loadLastEvaluation(title) {
+  try {
+    const raw = localStorage.getItem(lastEvaluationKey(title))
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveLastEvaluation(title, { results, errors }) {
+  try {
+    localStorage.setItem(lastEvaluationKey(title), JSON.stringify({ results, errors, savedAt: Date.now() }))
+  } catch {
+    // Non-fatal — just means "Show Last Evaluation" won't be available next time.
+  }
+}
+
 export default function PerformanceEvaluator({ holdings, title, onClose }) {
   const { targets } = usePriceTargets()
   const rateLimit = useConfigValue('twelve_data_rate_limit', DEFAULT_RATE_LIMIT)
@@ -42,6 +69,7 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
   const [runError, setRunError] = useState(null)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [lastEvaluation, setLastEvaluation] = useState(() => loadLastEvaluation(title))
   const saveMenuRef = useRef(null)
 
   useEffect(() => {
@@ -73,13 +101,24 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
       const { data, error } = await supabase.functions.invoke('evaluate-performance', { body: { tickers } })
       if (error) throw error
       if (data?.error) throw new Error(data.error)
-      setResults(data.results ?? {})
-      setErrors(data.errors ?? {})
+      const runResults = data.results ?? {}
+      const runErrors = data.errors ?? {}
+      setResults(runResults)
+      setErrors(runErrors)
+      saveLastEvaluation(title, { results: runResults, errors: runErrors })
+      setLastEvaluation(loadLastEvaluation(title))
     } catch (err) {
       setRunError(err.message)
     } finally {
       setRunning(false)
     }
+  }
+
+  function handleShowLast() {
+    if (!lastEvaluation) return
+    setRunError(null)
+    setResults(lastEvaluation.results)
+    setErrors(lastEvaluation.errors)
   }
 
   const rows = holdings
@@ -137,9 +176,21 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
                 {estimatedMinutes + 1 === 1 ? '' : 's'} due to API rate limits.
               </p>
             )}
-            <button className="btn btn--primary" onClick={handleRun}>
-              Run Evaluation
-            </button>
+            <div className="performance-evaluator__intro-actions">
+              <button className="btn btn--primary" onClick={handleRun}>
+                Run Evaluation
+              </button>
+              {lastEvaluation && (
+                <button className="btn btn--ghost" onClick={handleShowLast}>
+                  Show Last Evaluation
+                </button>
+              )}
+            </div>
+            {lastEvaluation && (
+              <p className="performance-evaluator__last-run">
+                Last run {new Date(lastEvaluation.savedAt).toLocaleString()}
+              </p>
+            )}
           </div>
         ) : running ? (
           <p className="performance-evaluator__loading">Evaluating… this can take a minute for larger portfolios.</p>
