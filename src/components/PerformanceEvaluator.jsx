@@ -7,7 +7,13 @@ import './PerformanceEvaluator.css'
 
 const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 }
 const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2, proximityPct: 0.03 }
-const DEFAULT_BUY_SELL_THRESHOLDS = { buyUpsidePct: 10, buyMinScore: 2, sellUpsidePct: -5, sellMaxScoreNearResistance: 1 }
+const DEFAULT_BUY_SELL_THRESHOLDS = {
+  buyUpsidePct: 10,
+  buyMinScore: 2,
+  sellUpsidePct: -5,
+  sellMaxScoreNearResistance: 1,
+  buyRequireStochBullish: false,
+}
 
 function formatCurrency(value) {
   const num = Number(value)
@@ -90,6 +96,8 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
           sma200: data.sma200,
           support: data.support,
           resistance: data.resistance,
+          stochK: data.stochK,
+          stochD: data.stochD,
         },
         { proximityPct: srTuning.proximityPct, ...buySellThresholds },
       )

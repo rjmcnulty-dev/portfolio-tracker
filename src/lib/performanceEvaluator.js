@@ -11,7 +11,8 @@
 //
 // Rules (checked in order):
 //   - No target set → Hold, trend-only note (can't judge value without one).
-//   - Upside >= 10% and trend score >= 2  → Buy.
+//   - Upside >= 10% and trend score >= 2 (and, if buyRequireStochBullish is
+//     on, %K above %D) → Buy.
 //   - Upside <= -5% (price already past target) → Sell.
 //   - Trend score <= 1 (downtrend) and price near a resistance level → Sell.
 //   - Everything else → Hold.
@@ -25,6 +26,7 @@ const DEFAULT_TUNING = {
   buyMinScore: 2,
   sellUpsidePct: -5,
   sellMaxScoreNearResistance: 1,
+  buyRequireStochBullish: false,
 }
 
 function trendScore(currentPrice, sma20, sma50, sma200) {
@@ -52,11 +54,18 @@ function isNear(currentPrice, level, proximityPct) {
   return Math.abs(currentPrice - level.price) / currentPrice <= proximityPct
 }
 
-export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma200, support, resistance }, tuning = {}) {
-  const { proximityPct, buyUpsidePct, buyMinScore, sellUpsidePct, sellMaxScoreNearResistance } = {
+export function evaluatePosition(
+  { currentPrice, targetPrice, sma20, sma50, sma200, support, resistance, stochK, stochD },
+  tuning = {},
+) {
+  const { proximityPct, buyUpsidePct, buyMinScore, sellUpsidePct, sellMaxScoreNearResistance, buyRequireStochBullish } = {
     ...DEFAULT_TUNING,
     ...tuning,
   }
+  // Only meaningful when buyRequireStochBullish is on — %K/%D aren't part of
+  // the Sell/Hold rules at all, just an optional extra gate on Buy. Missing
+  // data (stochK/stochD null) counts as not-bullish, not a free pass.
+  const stochBullish = stochK != null && stochD != null && stochK > stochD
   const hasAnySMA = sma20 != null || sma50 != null || sma200 != null
   const score = trendScore(currentPrice, sma20, sma50, sma200)
   const trend = trendLabel(score, hasAnySMA)
@@ -71,11 +80,14 @@ export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma2
   const reasons = []
   let suggestion = 'Hold'
 
+  const meetsBuyBar = upsidePct != null && upsidePct >= buyUpsidePct && score >= buyMinScore
+
   if (upsidePct == null) {
     reasons.push('No price target set — suggestion is trend-only until you set one on the Prices page.')
-  } else if (upsidePct >= buyUpsidePct && score >= buyMinScore) {
+  } else if (meetsBuyBar && (!buyRequireStochBullish || stochBullish)) {
     suggestion = 'Buy'
     reasons.push(`${upsidePct.toFixed(1)}% upside to target`, `${trend.toLowerCase()} (above ${score}/3 moving averages)`)
+    if (buyRequireStochBullish) reasons.push(`%K above %D (${stochK.toFixed(1)} > ${stochD.toFixed(1)})`)
   } else if (upsidePct <= sellUpsidePct) {
     suggestion = 'Sell'
     reasons.push(`Price is ${Math.abs(upsidePct).toFixed(1)}% above target`)
@@ -87,6 +99,9 @@ export function evaluatePosition({ currentPrice, targetPrice, sma20, sma50, sma2
       upsidePct != null ? `${upsidePct >= 0 ? '+' : ''}${upsidePct.toFixed(1)}% to target` : null,
       `${trend.toLowerCase()}`,
       nearSupport ? `near support (~$${nearestSupport.price.toFixed(2)})` : null,
+      meetsBuyBar && buyRequireStochBullish && !stochBullish
+        ? `would be a Buy, but %K isn't above %D (${stochK?.toFixed(1) ?? '—'} vs ${stochD?.toFixed(1) ?? '—'})`
+        : null,
     )
   }
 

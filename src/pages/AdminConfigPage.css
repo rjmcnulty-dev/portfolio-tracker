@@ -122,6 +122,34 @@
   flex-shrink: 0;
 }
 
+.admin-config__explanation {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-left: 3px solid var(--navy-dark);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.admin-config__explanation-title {
+  display: block;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.admin-config__explanation-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .admin-config__row-error {
   color: var(--red);
   font-size: 12px;

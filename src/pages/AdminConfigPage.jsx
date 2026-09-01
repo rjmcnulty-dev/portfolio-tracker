@@ -22,6 +22,7 @@ const FIELD_LABELS = {
   buyMinScore: 'Buy min trend score',
   sellUpsidePct: 'Sell upside threshold (%)',
   sellMaxScoreNearResistance: 'Sell max score near resistance',
+  buyRequireStochBullish: 'Require %K above %D for Buy',
   defaultDayCount: 'Default day count',
   weekSize: 'Week size (days)',
   options: 'Page size options',
@@ -210,6 +211,38 @@ function ConfigValueEditor({ value, onChange }) {
   return <PrimitiveEditor value={value} onChange={onChange} />
 }
 
+// Per-key supplementary explanations, rendered below the settings editor for
+// rows where the raw field labels alone don't convey how the values are
+// actually used — keyed by app_config.key, same pattern as FIELD_LABELS.
+// Receives the row's live (possibly unsaved) value so the wording always
+// reflects whatever's currently in the inputs.
+const EXPLANATIONS = {
+  buy_sell_thresholds: (value) => (
+    <ul className="admin-config__explanation-list">
+      <li>
+        <strong>Buy</strong> when upside to your price target is at least <strong>{value.buyUpsidePct}%</strong> and
+        the price is above at least <strong>{value.buyMinScore}</strong> of the 3 moving averages (20/50/200-day
+        SMA){value.buyRequireStochBullish ? ', and the Stochastic %K line is above the %D signal line' : ''}.
+      </li>
+      <li>
+        <strong>Sell</strong> when either upside to target has fallen to <strong>{value.sellUpsidePct}%</strong> or
+        below (price has reached or passed your target), or the trend score is at or below{' '}
+        <strong>{value.sellMaxScoreNearResistance}</strong> of 3 while price is sitting near a known resistance
+        level.
+      </li>
+      <li>
+        Everything else is a <strong>Hold</strong> — including any ticker with no price target set, since upside
+        can't be judged without one.
+      </li>
+      <li>
+        <strong>%K above %D</strong> is the Stochastic Oscillator turning up (a short-term momentum signal, same
+        indicator as the Stock Watch sub-chart) — toggle this on to require it alongside the upside/trend checks
+        above, off to ignore momentum entirely.
+      </li>
+    </ul>
+  ),
+}
+
 function ConfigRow({ row, onSave }) {
   const [value, setValue] = useState(row.value)
   const [error, setError] = useState(null)
@@ -248,6 +281,12 @@ function ConfigRow({ row, onSave }) {
           setJustSaved(false)
         }}
       />
+      {EXPLANATIONS[row.key] && (
+        <div className="admin-config__explanation">
+          <span className="admin-config__explanation-title">How this works</span>
+          {EXPLANATIONS[row.key](value)}
+        </div>
+      )}
       {error && <p className="admin-config__row-error">{error}</p>}
       <div className="admin-config__row-actions">
         <button className="btn btn--primary" disabled={saving} onClick={handleSave}>

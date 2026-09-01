@@ -782,11 +782,11 @@ the migration note under "Supabase SQL schema" for existing databases.
 evaluates every open position in that scope (all accounts, or just that one) and suggests
 Buy/Hold/Sell for each — a rule of thumb, not investment advice.
 
-Two inputs feed the suggestion:
+Two inputs feed the suggestion, plus an optional third gate on Buy:
 
 - **Trend** — SMA20/50/200 position and support/resistance levels, the same technical
   indicators Stock Watch charts already use, computed server-side by
-  `supabase/functions/evaluate-performance` from 1 year of daily closes per ticker (Twelve
+  `supabase/functions/evaluate-performance` from 1 year of daily OHLC per ticker (Twelve
   Data `time_series`).
 - **Price target** — a number **you** set yourself, per ticker, on the Prices page
   (`price_targets` table). Analyst consensus price targets aren't available on the
@@ -795,17 +795,25 @@ Two inputs feed the suggestion:
   symbol `AAPL` specifically — Twelve Data special-cases that one ticker as an always-free
   demo regardless of plan, which is easy to mistake for the endpoint actually being open;
   it isn't, for any other symbol).
+- **Stochastic %K/%D** (optional, off by default) — the same momentum indicator as the
+  Stock Watch Stochastic sub-chart (`stochastic_tuning`'s periods), computed server-side
+  from the same OHLC series. When `buy_sell_thresholds.buyRequireStochBullish` is on, a
+  Buy also requires %K above %D at the time of evaluation; when it's off, %K/%D are ignored
+  entirely. No extra API cost — high/low were already in Twelve Data's `time_series`
+  response, just not read by this function until now.
 
 `src/lib/performanceEvaluator.js` is the pure function that turns (current price, your
-target, SMA20/50/200, support/resistance) into a suggestion — it's intentionally isolated
-from the Edge Function (which only fetches/computes raw inputs) so the rule can be read,
-audited, or tuned without touching the data-fetching code:
+target, SMA20/50/200, support/resistance, %K/%D) into a suggestion — it's intentionally
+isolated from the Edge Function (which only fetches/computes raw inputs) so the rule can be
+read, audited, or tuned without touching the data-fetching code:
 
 - No target set → **Hold**, trend-only (there's nothing to judge value against yet).
-- ≥10% upside to target **and** price above at least 2 of the 3 SMAs → **Buy**.
+- ≥10% upside to target **and** price above at least 2 of the 3 SMAs (**and**, if enabled,
+  %K above %D) → **Buy**.
 - Price already ≥5% past target → **Sell**.
 - Downtrend (above 0-1 SMAs) and price sitting within 3% of a resistance level → **Sell**.
-- Everything else → **Hold**.
+- Everything else → **Hold** — including a position that would otherwise qualify for Buy
+  but fails the %K/%D gate, which says so explicitly in its reasons.
 
 Also returns 1/3/6/12-month trailing returns per ticker (shown in the modal alongside the
 suggestion) — informational, not an input to the suggestion itself.
@@ -1478,8 +1486,8 @@ insert into app_config (key, value, category, label, description) values
     '%K lookback, %K smoothing, and %D signal-line periods for the Stochastic sub-chart, plus the overbought/oversold reference levels drawn on it.'),
   ('obv_tuning', '{"trendPeriod":20,"emaPeriod":20}', 'Stock Watch', 'OBV Trend/EMA Periods',
     'Bars in the SMA-based Trend line and the EMA line plotted alongside raw On Balance Volume.'),
-  ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1}', 'Performance Evaluator', 'Buy/Sell Thresholds',
-    'Trigger points for the Buy/Sell suggestion: upside % to target and trend score cutoffs.'),
+  ('buy_sell_thresholds', '{"buyUpsidePct":10,"buyMinScore":2,"sellUpsidePct":-5,"sellMaxScoreNearResistance":1,"buyRequireStochBullish":false}', 'Performance Evaluator', 'Buy/Sell Thresholds',
+    'Trigger points for the Buy/Sell suggestion: upside % to target, trend score cutoffs, and an optional Stochastic %K > %D gate on Buy.'),
   ('daily_gains_defaults', '{"defaultDayCount":5,"weekSize":5}', 'Daily Gains', 'Daily Gains Defaults',
     'Default number of trading days shown, and the size of a "week" chunk in the Week dropdown.'),
   ('holdings_page_size_options', '{"options":[25,50,100,"All"],"default":25}', 'Trade Log', 'Page Size Options',
@@ -1499,6 +1507,14 @@ insert into app_config (key, value, category, label, description) values
   ('login_hint', '""', 'Auth', 'Login Password Hint',
     'Optional hint shown on the sign-in page to help you remember your password. Public/unauthenticated — visible to anyone who visits /login, so don''t put anything that gives the password away.')
 on conflict (key) do nothing;
+```
+
+**If you already ran the `buy_sell_thresholds` insert before `buyRequireStochBullish`
+existed**, run this once to add the field to your existing row so its checkbox shows up in
+`/admin` (a no-op if you're setting this up fresh — the insert above already includes it):
+
+```sql
+update app_config set value = value || '{"buyRequireStochBullish":false}'::jsonb where key = 'buy_sell_thresholds';
 ```
 
 Read stays public (anon) since the client, Edge Functions, and scripts all need it without a

@@ -1,7 +1,8 @@
 // Powers the on-demand Performance Evaluator (Dashboard + each account
-// page). For each held ticker, fetches 1 year of daily closes from Twelve
-// Data and computes trailing 1/3/6/12-month returns, SMA20/50/200, and
-// support/resistance levels server-side. The client combines that with your
+// page). For each held ticker, fetches 1 year of daily OHLC from Twelve
+// Data and computes trailing 1/3/6/12-month returns, SMA20/50/200,
+// support/resistance levels, and latest Stochastic %K/%D server-side. The
+// client combines that with your
 // own manually-set price target (price_targets table — analyst consensus
 // targets aren't available on the free-tier APIs this app uses; Finnhub's
 // /stock/price-target 403s on the free tier, and Twelve Data's
@@ -38,10 +39,13 @@ function sleep(ms: number) {
 const DEFAULT_RATE_LIMIT = { maxPerWindow: 8, windowMs: 61_000 };
 const DEFAULT_MA_PERIODS = [20, 50, 200];
 const DEFAULT_SR_TUNING = { tolerancePct: 0.015, swingWindowPct: 0.03, maxLevelsDefault: 2 };
+const DEFAULT_STOCHASTIC_TUNING = { kPeriod: 14, kSmoothing: 3, dPeriod: 3 };
 
 interface SeriesPoint {
   date: string;
   close: number;
+  high: number;
+  low: number;
 }
 
 async function fetchSeries(ticker: string, apiKey: string): Promise<SeriesPoint[]> {
@@ -53,10 +57,12 @@ async function fetchSeries(ticker: string, apiKey: string): Promise<SeriesPoint[
     throw new Error(`Twelve Data error for ${ticker}: ${body.message || JSON.stringify(body)}`);
   }
 
-  const values: { datetime: string; close: string }[] = body.values ?? [];
+  // Twelve Data returns full OHLC by default (no extra param needed) — high/low
+  // are only read here for the Stochastic %K/%D gate on the Buy suggestion.
+  const values: { datetime: string; close: string; high: string; low: string }[] = body.values ?? [];
   return values
-    .map((v) => ({ date: v.datetime, close: Number(v.close) }))
-    .filter((v) => !Number.isNaN(v.close))
+    .map((v) => ({ date: v.datetime, close: Number(v.close), high: Number(v.high), low: Number(v.low) }))
+    .filter((v) => !Number.isNaN(v.close) && !Number.isNaN(v.high) && !Number.isNaN(v.low))
     .reverse(); // Twelve Data returns newest-first; oldest-first is easier to walk.
 }
 
@@ -102,6 +108,55 @@ function latestSMA(series: SeriesPoint[], period: number): number | null {
   if (series.length < period) return null;
   const window = series.slice(series.length - period);
   return window.reduce((sum, p) => sum + p.close, 0) / period;
+}
+
+interface Point {
+  date: string;
+  value: number;
+}
+
+// Same SMA-of-points windowing as src/lib/technicalIndicators.js's
+// smoothPoints — kept as a tiny local port rather than a shared module since
+// Deno edge functions can't import from src/.
+function smoothPoints(points: Point[], period: number): Point[] {
+  if (period <= 1) return points;
+  const result: Point[] = [];
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    sum += points[i].value;
+    if (i >= period) sum -= points[i - period].value;
+    if (i >= period - 1) result.push({ date: points[i].date, value: sum / period });
+  }
+  return result;
+}
+
+// Same math as technicalIndicators.js's computeStochastic, but this only
+// needs the latest %K/%D value (a current-trend snapshot), not the full
+// charted series.
+function latestStochastic(
+  series: SeriesPoint[],
+  kPeriod: number,
+  kSmoothing: number,
+  dPeriod: number,
+): { k: number | null; d: number | null } {
+  if (series.length < kPeriod) return { k: null, d: null };
+
+  const rawK: Point[] = [];
+  for (let i = kPeriod - 1; i < series.length; i++) {
+    const window = series.slice(i - kPeriod + 1, i + 1);
+    const highestHigh = Math.max(...window.map((p) => p.high));
+    const lowestLow = Math.min(...window.map((p) => p.low));
+    const range = highestHigh - lowestLow;
+    const value = range === 0 ? 50 : ((series[i].close - lowestLow) / range) * 100;
+    rawK.push({ date: series[i].date, value });
+  }
+
+  const k = smoothPoints(rawK, kSmoothing);
+  const d = smoothPoints(k, dPeriod);
+  return {
+    k: k.length ? k[k.length - 1].value : null,
+    d: d.length ? d[d.length - 1].value : null,
+  };
 }
 
 interface Level {
@@ -185,6 +240,9 @@ Deno.serve(async (req) => {
   const rateLimit = await getConfig(supabase, "twelve_data_rate_limit", DEFAULT_RATE_LIMIT);
   const maPeriods = await getConfig(supabase, "moving_average_periods", DEFAULT_MA_PERIODS);
   const srTuning = await getConfig(supabase, "support_resistance_tuning", DEFAULT_SR_TUNING);
+  // Same tuning the Stock Watch Stochastic sub-chart uses (stochastic_tuning),
+  // reused here for the optional %K > %D gate on the Buy suggestion.
+  const stochTuning = await getConfig(supabase, "stochastic_tuning", DEFAULT_STOCHASTIC_TUNING);
 
   let tickers: string[] = [];
   try {
@@ -222,6 +280,12 @@ Deno.serve(async (req) => {
             srTuning.tolerancePct,
             srTuning.swingWindowPct,
           );
+          const { k: stochK, d: stochD } = latestStochastic(
+            series,
+            stochTuning.kPeriod,
+            stochTuning.kSmoothing,
+            stochTuning.dPeriod,
+          );
 
           results[ticker] = {
             currentPrice: series[series.length - 1].close,
@@ -231,6 +295,8 @@ Deno.serve(async (req) => {
             sma200: latestSMA(series, maPeriods[2]),
             support,
             resistance,
+            stochK,
+            stochD,
           };
         } catch (err) {
           errors[ticker] = err instanceof Error ? err.message : String(err);
