@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { usePriceTargets } from '../hooks/usePriceTargets'
 import { evaluatePosition } from '../lib/performanceEvaluator'
@@ -34,6 +34,30 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
   const [results, setResults] = useState(null)
   const [errors, setErrors] = useState({})
   const [runError, setRunError] = useState(null)
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const saveMenuRef = useRef(null)
+
+  useEffect(() => {
+    if (!saveMenuOpen) return
+    function handleClickOutside(event) {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(event.target)) setSaveMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [saveMenuOpen])
+
+  async function handleSaveAs(format) {
+    setSaveMenuOpen(false)
+    setSaving(true)
+    try {
+      const { exportPerformanceEvaluatorPdf, exportPerformanceEvaluatorDocx } = await import('../lib/performanceEvaluatorExport')
+      if (format === 'pdf') exportPerformanceEvaluatorPdf(rows, title)
+      else await exportPerformanceEvaluatorDocx(rows, title)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function handleRun() {
     setRunning(true)
@@ -161,6 +185,25 @@ export default function PerformanceEvaluator({ holdings, title, onClose }) {
               </p>
             ))}
             <div className="performance-evaluator__actions">
+              <div className="performance-evaluator__save-as" ref={saveMenuRef}>
+                <button
+                  className="btn btn--ghost"
+                  disabled={saving || !rows.length}
+                  onClick={() => setSaveMenuOpen((open) => !open)}
+                >
+                  {saving ? 'Saving…' : 'Save As…'}
+                </button>
+                {saveMenuOpen && (
+                  <div className="performance-evaluator__save-menu">
+                    <button className="performance-evaluator__save-menu-item" onClick={() => handleSaveAs('pdf')}>
+                      PDF (.pdf)
+                    </button>
+                    <button className="performance-evaluator__save-menu-item" onClick={() => handleSaveAs('docx')}>
+                      Word (.docx)
+                    </button>
+                  </div>
+                )}
+              </div>
               <button className="btn btn--ghost" disabled={running} onClick={handleRun}>
                 Re-run
               </button>

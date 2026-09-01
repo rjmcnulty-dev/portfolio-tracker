@@ -117,4 +117,39 @@
 .performance-evaluator__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.performance-evaluator__save-as {
+  position: relative;
+}
+
+.performance-evaluator__save-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid #e2e6eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.performance-evaluator__save-menu-item {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.performance-evaluator__save-menu-item:hover {
+  background: #f2f4f7;
 }
