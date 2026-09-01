@@ -600,11 +600,25 @@ npm run portfolio:backfill
    calls/day)
 3. Upserts them into `ticker_prices`
 
-`.github/workflows/refresh-prices.yml` runs it automatically on weekdays at 21:00 UTC
-(shortly after the US market close), and can also be triggered manually from the Actions
-tab (`workflow_dispatch`). `usePortfolio` overlays the latest price onto each open (`BUY`)
-trade row to compute live `market_value` and `unrealized_pnl` — the underlying `trades`
-rows in Supabase are never modified by the job, only `ticker_prices` is.
+`.github/workflows/refresh-prices.yml` runs it automatically on weekdays at 21:17 UTC
+(shortly after the US market close; deliberately not on the hour — see the cron's own
+comment), and can also be triggered manually from the Actions tab (`workflow_dispatch`).
+`usePortfolio` overlays the latest price onto each open (`BUY`) trade row to compute live
+`market_value` and `unrealized_pnl` — the underlying `trades` rows in Supabase are never
+modified by the job, only `ticker_prices` is.
+
+Each price's `as_of` (and the value snapshots' `snapshot_date`, same variable) is stamped
+using `todayInEastern()` (`scripts/lib/dates.mjs` / `supabase/functions/_shared/dates.ts`,
+`Intl.DateTimeFormat` with `timeZone: 'America/New_York'`), not a raw `new Date()` read —
+GitHub Actions runners and Supabase Edge Functions both run in UTC, and a run that happens
+to land between 8pm and midnight Eastern is still "today" in Eastern while UTC has already
+rolled to tomorrow. A raw UTC read stamped that day's real closing prices with tomorrow's
+date whenever a run landed in that window, which happens more than you'd expect — GitHub
+Actions can delay a hard-on-the-hour scheduled trigger by hours under load (see the cron
+comment above), and delays that size can easily push a 5pm-ET-scheduled run past the UTC
+midnight boundary. `materialize-trades.mjs`/`materialize-deposits.mjs` and their Edge
+Function counterparts use the same helper for their own "what's due today" cutoff, for the
+identical reason.
 
 The **Prices** page (`/prices`) lets you override any ticker's price by hand — useful
 right after adding a trade (before the next scheduled run) or for a ticker Twelve Data
@@ -1811,12 +1825,14 @@ scripts/
     config.mjs               # getConfig() — reads app_config, shared by the scripts above
     secrets.mjs               # getSecret() — calls reveal-secret, see "Encrypted secrets"
     tradeTypes.mjs            # getTradeTypeSets() — reads trade_types, see "Trade Types"
+    dates.mjs                 # todayInEastern() — see "Daily price refresh"
 supabase/
   functions/
     _shared/
       config.ts               # getConfig() — Edge Function counterpart of scripts/lib/config.mjs
       secrets.ts               # encrypt/decrypt/getDecryptedSecret — see "Encrypted secrets"
       tradeTypes.ts            # getTradeTypeSets() — Edge Function counterpart of scripts/lib/tradeTypes.mjs
+      dates.ts                 # todayInEastern() — Edge Function counterpart of scripts/lib/dates.mjs
     refresh-prices/          # On-demand version of fetch-prices.mjs, called by "Update All Prices"
     materialize-deposits/    # On-demand version of materialize-deposits.mjs, called by "Sync Now"
     materialize-trades/      # On-demand version of materialize-trades.mjs, called by "Sync Now"

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { todayInEastern } from './lib/dates.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -61,7 +62,7 @@ async function main() {
     .eq('active', true)
   if (schedulesError) throw schedulesError
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInEastern()
   const rows = []
 
   for (const schedule of schedules ?? []) {

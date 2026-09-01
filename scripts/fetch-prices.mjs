@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
 import { getSecret } from './lib/secrets.mjs'
 import { getTradeTypeSets } from './lib/tradeTypes.mjs'
+import { todayInEastern } from './lib/dates.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -131,7 +132,7 @@ async function main() {
   const { buyLot, deductsCash } = await getTradeTypeSets(supabase)
   const quotes = await fetchQuotes(tickers, twelveDataApiKey, rateLimit.maxPerWindow, rateLimit.windowMs)
 
-  const asOf = new Date().toISOString().slice(0, 10)
+  const asOf = todayInEastern()
   const now = new Date().toISOString()
   const rows = []
 

@@ -9,6 +9,7 @@
 // platform gateway via `verify_jwt = false` + the public apikey header).
 import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../_shared/config.ts";
+import { todayInEastern } from "../_shared/dates.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -115,7 +116,7 @@ Deno.serve(async (req) => {
     return json({ error: schedulesError.message }, 500);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInEastern();
   const rows: {
     account: string;
     amount: number;

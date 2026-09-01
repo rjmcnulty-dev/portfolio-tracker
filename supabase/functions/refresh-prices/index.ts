@@ -11,6 +11,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../_shared/config.ts";
 import { getDecryptedSecret } from "../_shared/secrets.ts";
 import { getTradeTypeSets } from "../_shared/tradeTypes.ts";
+import { todayInEastern } from "../_shared/dates.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -213,7 +214,7 @@ Deno.serve(async (req) => {
     return json({ message: "No tickers found in trades or benchmarks — nothing to fetch.", updated: [] });
   }
 
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = todayInEastern();
   const now = new Date().toISOString();
   let quotes: Record<string, { price?: string }>;
   let updatedTickers: string[] = [];

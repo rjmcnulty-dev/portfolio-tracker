@@ -9,6 +9,7 @@
 // platform gateway via `verify_jwt = false` + the public apikey header).
 import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../_shared/config.ts";
+import { todayInEastern } from "../_shared/dates.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
     (priceRows ?? []).map((p: { ticker: string; price: number }) => [p.ticker, Number(p.price)]),
   );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInEastern();
   const rows: Record<string, unknown>[] = [];
   const skippedTickers = new Set<string>();
 

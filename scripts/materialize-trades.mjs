@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { todayInEastern } from './lib/dates.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
@@ -78,7 +79,7 @@ async function main() {
 
   const priceByTicker = new Map(priceRows.map((p) => [p.ticker, Number(p.price)]))
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInEastern()
   const rows = []
   const skippedTickers = new Set()
 
