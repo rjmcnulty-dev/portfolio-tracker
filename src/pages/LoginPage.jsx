@@ -118,7 +118,7 @@ export default function LoginPage() {
     <div className="login-page">
       <form className="login-page__card" onSubmit={handleSubmit}>
         <h1 className="login-page__title">Sign in</h1>
-        <p className="login-page__subtitle">Admin access to Portfolio Tracker.</p>
+        <p className="login-page__subtitle">Sign in to Portfolio Tracker.</p>
         <label>
           Email
           <input
