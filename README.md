@@ -356,10 +356,12 @@ create table if not exists watchlist (
 
 -- ─────────────────────────────────────────────
 -- Row Level Security
--- This app uses the anon key directly from the browser. For a
--- single-user setup, enable RLS and allow all operations for now;
--- tighten these policies (e.g. scope to auth.uid()) before sharing
--- the project or adding multi-user auth.
+-- This app uses the anon key directly from the browser, but every page now
+-- requires a real login (see "Login-gated app" below) — so every operation on
+-- these personal-data tables requires auth.role() = 'authenticated', not just
+-- possession of the (necessarily public) anon key. Reference-only tables
+-- (trade_types, benchmarks, app_config) stay public-read separately, further
+-- down, since they hold no personal data.
 -- ─────────────────────────────────────────────
 alter table accounts enable row level security;
 alter table trades enable row level security;
@@ -376,20 +378,34 @@ alter table deposits enable row level security;
 alter table trade_schedules enable row level security;
 alter table watchlist enable row level security;
 
-create policy "Allow all on accounts" on accounts for all using (true) with check (true);
-create policy "Allow all on trades" on trades for all using (true) with check (true);
-create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for all using (true) with check (true);
-create policy "Allow all on tax_settings" on tax_settings for all using (true) with check (true);
-create policy "Allow all on roth_conversions" on roth_conversions for all using (true) with check (true);
-create policy "Allow all on ticker_prices" on ticker_prices for all using (true) with check (true);
-create policy "Allow all on ticker_price_history" on ticker_price_history for all using (true) with check (true);
-create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
-create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
-create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
-create policy "Allow all on deposit_schedules" on deposit_schedules for all using (true) with check (true);
-create policy "Allow all on deposits" on deposits for all using (true) with check (true);
-create policy "Allow all on trade_schedules" on trade_schedules for all using (true) with check (true);
-create policy "Allow all on watchlist" on watchlist for all using (true) with check (true);
+create policy "Authenticated access on accounts" on accounts for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on trades" on trades for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on trade_lot_allocations" on trade_lot_allocations for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on tax_settings" on tax_settings for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on roth_conversions" on roth_conversions for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on ticker_prices" on ticker_prices for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on ticker_price_history" on ticker_price_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on price_targets" on price_targets for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on portfolio_value_history" on portfolio_value_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on account_value_history" on account_value_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on deposit_schedules" on deposit_schedules for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on deposits" on deposits for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on trade_schedules" on trade_schedules for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on watchlist" on watchlist for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 **If you already have a database from before accounts became dynamic**, run this
@@ -405,7 +421,8 @@ create table if not exists accounts (
 );
 
 alter table accounts enable row level security;
-create policy "Allow all on accounts" on accounts for all using (true) with check (true);
+create policy "Authenticated access on accounts" on accounts for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 insert into accounts (name)
 values ('Robinhood'), ('Traditional IRA'), ('Roth IRA')
@@ -449,7 +466,8 @@ create index if not exists trade_lot_allocations_sell_idx on trade_lot_allocatio
 create index if not exists trade_lot_allocations_buy_idx on trade_lot_allocations (buy_trade_id);
 
 alter table trade_lot_allocations enable row level security;
-create policy "Allow all on trade_lot_allocations" on trade_lot_allocations for all using (true) with check (true);
+create policy "Authenticated access on trade_lot_allocations" on trade_lot_allocations for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 **If you already have a database from before deposit types**, run this migration to add
@@ -496,7 +514,8 @@ create table if not exists portfolio_value_history (
 );
 
 alter table portfolio_value_history enable row level security;
-create policy "Allow all on portfolio_value_history" on portfolio_value_history for all using (true) with check (true);
+create policy "Authenticated access on portfolio_value_history" on portfolio_value_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 **If you already have a database from before per-account value charts**, run this
@@ -514,7 +533,8 @@ create table if not exists account_value_history (
 create index if not exists account_value_history_account_idx on account_value_history (account);
 
 alter table account_value_history enable row level security;
-create policy "Allow all on account_value_history" on account_value_history for all using (true) with check (true);
+create policy "Authenticated access on account_value_history" on account_value_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 Then run `npm run portfolio:backfill` once (see "Portfolio value history" below) — it
@@ -562,7 +582,8 @@ create table if not exists price_targets (
 );
 
 alter table price_targets enable row level security;
-create policy "Allow all on price_targets" on price_targets for all using (true) with check (true);
+create policy "Authenticated access on price_targets" on price_targets for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 **If you already have a database from before the Daily Gains table**, run this migration
@@ -582,7 +603,8 @@ create table if not exists ticker_price_history (
 create index if not exists ticker_price_history_ticker_idx on ticker_price_history (ticker);
 
 alter table ticker_price_history enable row level security;
-create policy "Allow all on ticker_price_history" on ticker_price_history for all using (true) with check (true);
+create policy "Authenticated access on ticker_price_history" on ticker_price_history for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 ```
 
 ```bash
@@ -630,14 +652,15 @@ To run it locally:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
-SUPABASE_ANON_KEY=your_anon_key \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
 TWELVE_DATA_API_KEY=your_twelve_data_key \
 npm run prices:fetch
 ```
 
-For the scheduled workflow to run, add `TWELVE_DATA_API_KEY` as a repository secret
-(Settings → Secrets and variables → Actions) — it reuses the existing
-`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` secrets for the Supabase connection. Get a
+For the scheduled workflow to run, add `TWELVE_DATA_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
+as repository secrets (Settings → Secrets and variables → Actions) — it reuses the existing
+`VITE_SUPABASE_URL` secret for the connection URL, but needs the service-role key
+specifically (see "Admin / Auth" above for why the anon key no longer works here). Get a
 free API key at [twelvedata.com](https://twelvedata.com/). Never prefix it `VITE_` — that
 would bundle it into the client-side JS and expose it publicly.
 
@@ -678,7 +701,7 @@ never disagree about "today"). Run it once, after creating both tables:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
-SUPABASE_ANON_KEY=your_anon_key \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
 TWELVE_DATA_API_KEY=your_twelve_data_key \
 npm run portfolio:backfill
 ```
@@ -939,7 +962,7 @@ To run the script locally:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
-SUPABASE_ANON_KEY=your_anon_key \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
 npm run deposits:materialize
 ```
 
@@ -983,7 +1006,7 @@ To run the script locally:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
-SUPABASE_ANON_KEY=your_anon_key \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
 npm run trades:materialize
 ```
 
@@ -1066,8 +1089,9 @@ succeeds, but actually *using* it on a trade fails with `violates check constrai
 alter table trades drop constraint if exists trades_trade_type_check;
 ```
 
-Read stays public (anon) since the New/Edit Trade dropdown needs it without a login, same as
-`app_config`; writes require `authenticated`. A custom type can't be deleted while any trade
+Read stays public (anon) since it's reference data, not personal information — harmless to
+read without a login even now that the rest of the app requires one (see "Admin / Auth")
+— same as `app_config`; writes require `authenticated`. A custom type can't be deleted while any trade
 still uses it (checked before the delete, same "friendly error instead of a raw constraint
 failure" pattern as deleting an account with trades attached) — core types have no
 edit/delete control at all, not just a disabled one.
@@ -1138,7 +1162,7 @@ benchmark has no history before the day it was added until you backfill it:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
-SUPABASE_ANON_KEY=your_anon_key \
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
 TWELVE_DATA_API_KEY=your_twelve_data_key \
 npm run benchmarks:backfill            # every benchmark
 npm run benchmarks:backfill -- SPY     # just one ticker
@@ -1397,15 +1421,26 @@ With nothing saved yet, every tab is selected and Benchmarks opens by default.
 
 ## Admin / Auth
 
-`/admin` is a login-gated section for app configuration (business settings now, encrypted
-API-key management to follow) — the one part of this app that requires signing in. Every
-other route and table is unaffected: this app otherwise has **no authentication anywhere**,
-by design (see the "single-user setup" note in the SQL schema section above) — every table's
-RLS policy is `using (true)` for the anon role, and the sidebar/every other page works with
-no session at all. `/admin` is a deliberate, narrow exception to that.
+The **entire app** is login-gated — every route requires signing in, not just `/admin`.
+This started as an admin-only exception (`/admin` was the one part requiring auth, every
+other table was `using (true)` for the anon role) but that left real financial data —
+holdings, trades, deposits, tax settings — readable *and writable* by anyone holding the
+anon key, which is necessarily public (it ships in the client JS bundle by design). Since
+this is a single-user app with no legitimate anonymous access pattern at all, the fix was to
+require `auth.role() = 'authenticated'` everywhere personal data lives, and gate every route
+behind the same login `/admin` already used, rather than trying to carve out narrower
+per-table exceptions.
 
-**One-time setup** — create the single admin user via the Supabase Dashboard (there is no
-in-app sign-up flow, intentionally, since this is a single-user app):
+Left public-read (no personal data in them, and `login_hint` specifically must render before
+login): `trade_types`, `benchmarks`, `app_config`. Everything else — `accounts`, `trades`,
+`trade_lot_allocations`, `tax_settings`, `roth_conversions`, `ticker_prices`,
+`ticker_price_history`, `price_targets`, `portfolio_value_history`,
+`account_value_history`, `deposit_schedules`, `deposits`, `trade_schedules`, `watchlist` —
+requires `authenticated` for every operation now (see each table's RLS policy in the schema
+section above).
+
+**One-time setup** — create the single admin/login user via the Supabase Dashboard (there is
+no in-app sign-up flow, intentionally, since this is a single-user app):
 
 1. Supabase Dashboard → **Authentication → Users → Add user**.
 2. Enter an email and password, and check **Auto Confirm User** (skips email verification —
@@ -1417,13 +1452,17 @@ in-app sign-up flow, intentionally, since this is a single-user app):
 `@supabase/supabase-js` already persists to `localStorage` and auto-refreshes by default —
 nothing extra configured for that). `src/components/RequireAuth.jsx` is a route-wrapper that
 redirects to `/login` when signed out, remembering the page you were headed to so sign-in
-returns you there. `src/pages/LoginPage.jsx` is a standalone page (no sidebar) that calls
-`supabase.auth.signInWithPassword`. `/admin` itself (`src/pages/AdminPage.jsx`) stays nested
-under the normal `Layout` so it keeps the sidebar like every other page.
+returns you there — in `src/App.jsx`, every route except `/login` itself is nested under it.
+`src/pages/LoginPage.jsx` is a standalone page (no sidebar) that calls
+`supabase.auth.signInWithPassword`.
 
-This protects **who can reach `/admin`'s controls** — it does not change what the anon key
-can already do to the database directly (every other table is still `using (true)`, unchanged
-by this feature).
+**Server-side access is unaffected**: every Edge Function already used the service-role key
+(bypasses RLS by design, auto-injected by the Supabase Edge runtime — no extra secret
+needed there). The scheduled GitHub Actions scripts (`scripts/fetch-prices.mjs`,
+`scripts/materialize-deposits.mjs`, `scripts/materialize-trades.mjs`, and the two ad-hoc
+backfill scripts) switched from the anon key to `SUPABASE_SERVICE_ROLE_KEY` for the same
+reason — they have no user session to authenticate with, and now need the same bypass. See
+"Deployment" below for the repository secret this requires.
 
 ### Password reset
 
@@ -1517,9 +1556,10 @@ existed**, run this once to add the field to your existing row so its checkbox s
 update app_config set value = value || '{"buyRequireStochBullish":false}'::jsonb where key = 'buy_sell_thresholds';
 ```
 
-Read stays public (anon) since the client, Edge Functions, and scripts all need it without a
-login; writes require `authenticated` — the one deliberate RLS-tightening this project adds,
-scoped to this new table only (no changes to any of the 14 pre-existing tables' policies).
+Read stays public (anon) — `login_hint` specifically must render on `/login` itself, before
+a session exists, so `app_config` as a whole stays public-read even though every other page
+that would use these settings is now behind login (see "Admin / Auth"); writes require
+`authenticated`.
 
 Explicitly **left out** of this table (audited but not worth the churn): the Watchlist chart's
 `RANGES`/`LEVEL_COUNTS` and `watchlist-quote`'s paired `RANGE_PARAMS` (tightly-coupled
@@ -1864,9 +1904,14 @@ A GitHub Actions workflow at `.github/workflows/deploy.yml` builds the app and d
 to GitHub Pages on every push to `main`. In your repo settings, set **Settings → Pages →
 Source** to **GitHub Actions**. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as
 repository secrets (Settings → Secrets and variables → Actions) so the build step can
-inject them. Add `TWELVE_DATA_API_KEY` as well so `.github/workflows/refresh-prices.yml`
-can run (see "Daily price refresh" above). `.github/workflows/materialize-deposits.yml` and
-`.github/workflows/materialize-trades.yml` need no extra secret beyond the two Supabase
-ones. If you've set up encrypted secrets (see "Encrypted secrets" above), also add
-`SUPABASE_SERVICE_ROLE_KEY` and `CONFIG_ENCRYPTION_KEY` — without them, `refresh-prices.yml`
-still works fine by falling back to the plain `TWELVE_DATA_API_KEY` secret.
+inject them — these two are only ever used client-side (the anon key is meant to be
+public; RLS is the actual boundary, see "Admin / Auth" above).
+
+Add `SUPABASE_SERVICE_ROLE_KEY` as well — required now by all three scheduled workflows
+(`refresh-prices.yml`, `materialize-deposits.yml`, `materialize-trades.yml`), since the
+tables they write to require an authenticated session and none of these scripts have a
+user session of their own; the service-role key bypasses RLS entirely, same as every Edge
+Function. Add `TWELVE_DATA_API_KEY` too so `refresh-prices.yml` can call Twelve Data (see
+"Daily price refresh" above). If you've also set up encrypted secrets (see "Encrypted
+secrets" above), add `CONFIG_ENCRYPTION_KEY` — without it, `refresh-prices.yml` still works
+fine by falling back to the plain `TWELVE_DATA_API_KEY` secret.

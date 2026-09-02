@@ -44,16 +44,16 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="login" element={<LoginPage />} />
-      <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="account/:accountSlug" element={<AccountPage />} />
-        <Route path="trades" element={<TradesPage />} />
-        <Route path="prices" element={<PricesPage />} />
-        <Route path="deposits" element={<DepositsPage />} />
-        <Route path="watch" element={<StockWatchPage />} />
-        <Route path="portfolio-stocks" element={<PortfolioStocksPage />} />
-        <Route path="tax" element={<TaxPage />} />
-        <Route element={<RequireAuth />}>
+      <Route element={<RequireAuth />}>
+        <Route element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="account/:accountSlug" element={<AccountPage />} />
+          <Route path="trades" element={<TradesPage />} />
+          <Route path="prices" element={<PricesPage />} />
+          <Route path="deposits" element={<DepositsPage />} />
+          <Route path="watch" element={<StockWatchPage />} />
+          <Route path="portfolio-stocks" element={<PortfolioStocksPage />} />
+          <Route path="tax" element={<TaxPage />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="ai-companion" element={<AiCompanionPage />} />
         </Route>

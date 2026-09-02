@@ -5,21 +5,25 @@
 // immediately instead of only accumulating from today forward.
 //
 // Usage:
-//   SUPABASE_URL=... SUPABASE_ANON_KEY=... TWELVE_DATA_API_KEY=... npm run benchmarks:backfill
-//   SUPABASE_URL=... SUPABASE_ANON_KEY=... TWELVE_DATA_API_KEY=... npm run benchmarks:backfill -- SPY
+//   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... TWELVE_DATA_API_KEY=... npm run benchmarks:backfill
+//   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... TWELVE_DATA_API_KEY=... npm run benchmarks:backfill -- SPY
 import { createClient } from '@supabase/supabase-js'
 import { getConfig } from './lib/config.mjs'
 import { getSecret } from './lib/secrets.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+// Service role, not anon — ticker_price_history RLS requires an
+// authenticated session now that the whole app is login-gated, and this
+// script has no user session to authenticate with. Service role bypasses
+// RLS entirely, same as every Edge Function in this repo already does.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY')
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY')
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // Twelve Data's free tier caps at 8 API credits/minute; /time_series only
 // accepts one symbol per call, so each ticker costs its own credit

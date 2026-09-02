@@ -5,14 +5,20 @@ import { getTradeTypeSets } from './lib/tradeTypes.mjs'
 import { todayInEastern } from './lib/dates.mjs'
 
 const SUPABASE_URL = process.env.SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+// Service role, not anon — ticker_prices/portfolio_value_history RLS
+// requires an authenticated session now that the whole app is login-gated,
+// and this script has no user session to authenticate with. Service role
+// bypasses RLS entirely, same as every Edge Function in this repo already
+// does. Also what getSecret() (lib/secrets.mjs) already needed for the
+// encrypted-secret lookup below — one env var now covers both.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_ANON_KEY')
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing required env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY')
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 // Twelve Data's free tier caps at 8 API credits/minute, and each symbol costs
 // 1 credit even inside a single batched request — so a portfolio with more
