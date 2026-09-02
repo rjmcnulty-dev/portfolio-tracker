@@ -277,6 +277,47 @@ h3 {
   margin: 6px 0;
 }
 
+.sidebar__footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.sidebar--collapsed .sidebar__footer {
+  align-items: center;
+}
+
+.sidebar__footer-email {
+  margin: 0 0 2px;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-muted-on-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__footer button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.sidebar--collapsed .sidebar__footer button {
+  width: auto;
+}
+
+.sidebar__footer button.sidebar__icon-link {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .app-main {
   flex: 1;
   padding: 32px 40px;

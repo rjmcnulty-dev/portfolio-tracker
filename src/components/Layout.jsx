@@ -6,12 +6,14 @@ import {
   ClipboardList,
   DollarSign,
   Eye,
+  LogOut,
   PieChart,
   Percent,
   Settings,
   Wallet,
 } from 'lucide-react'
 import { useAccounts } from '../hooks/useAccounts'
+import { useAuth } from '../hooks/useAuth'
 import { useConfigValue } from '../hooks/useAppConfig'
 import { useTradeTypes } from '../hooks/useTradeTypes'
 import { slugify } from '../lib/accounts'
@@ -75,6 +77,7 @@ function loadToolOrder() {
 }
 
 export default function Layout() {
+  const { user, signOut } = useAuth()
   const { accounts, addAccount, deleteAccount, moveAccount, error: accountsError } = useAccounts()
   const [showManageAccounts, setShowManageAccounts] = useState(false)
   const [showManageTools, setShowManageTools] = useState(false)
@@ -215,6 +218,23 @@ export default function Layout() {
               ))}
           </nav>
         )}
+
+        <div className="sidebar__footer">
+          {!sidebarCollapsed && user?.email && (
+            <p className="sidebar__footer-email" title={user.email}>
+              {user.email}
+            </p>
+          )}
+          <button
+            type="button"
+            className={sidebarCollapsed ? 'sidebar__icon-link' : 'sidebar__link'}
+            onClick={signOut}
+            title="Sign out"
+          >
+            <LogOut size={sidebarCollapsed ? 18 : 16} strokeWidth={2} />
+            {!sidebarCollapsed && 'Sign out'}
+          </button>
+        </div>
       </aside>
       <main className="app-main">
         <Outlet />
