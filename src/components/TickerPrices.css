@@ -68,6 +68,8 @@
 }
 
 .ticker-prices__note-icon {
+  display: inline-flex;
+  align-items: center;
   margin-left: 5px;
   vertical-align: -2px;
   color: var(--gold);

@@ -311,12 +311,14 @@ export default function TickerPrices() {
                     <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
                       {ticker}
                       {tickerNotes && (
-                        <StickyNote
-                          size={13}
-                          strokeWidth={2}
-                          className="ticker-prices__note-icon"
-                          title={tickerNotes.join('\n\n')}
-                        />
+                        // title has to live on this wrapping span, not the
+                        // <svg> icon itself — a `title` attribute set
+                        // directly on an <svg> element doesn't trigger the
+                        // native browser tooltip (only a nested <title>
+                        // child, or title on a regular HTML element, does).
+                        <span className="ticker-prices__note-icon" title={tickerNotes.join('\n\n')}>
+                          <StickyNote size={13} strokeWidth={2} />
+                        </span>
                       )}
                     </td>
                     {visibleAccounts.map((account) => {
