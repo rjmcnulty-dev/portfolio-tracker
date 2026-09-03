@@ -187,6 +187,13 @@ export function usePortfolio(account = 'All') {
       byTicker.set(trade.ticker, entry)
     }
 
+    // Same "% of gross investment total" definition as investmentAllocation
+    // below (cost basis over total invested + cash) — computed here too so
+    // it's just another sortable numeric field on each holding, same as
+    // unrealizedPct, rather than a second value HoldingsSummaryTable has to
+    // merge in by ticker.
+    const grossTotal = kpis.invested + cashPosition
+
     return [...byTicker.values()]
       .map(({ costValue, ...entry }) => {
         const unrealizedPnl = entry.marketValue - entry.costBasis
@@ -200,10 +207,11 @@ export function usePortfolio(account = 'All') {
           currentPrice: entry.quantity > 0 ? entry.marketValue / entry.quantity : 0,
           unrealizedPnl,
           unrealizedPct: entry.costBasis > 0 ? (unrealizedPnl / entry.costBasis) * 100 : 0,
+          pctOfPortfolio: grossTotal > 0 ? (entry.costBasis / grossTotal) * 100 : 0,
         }
       })
       .sort((a, b) => b.marketValue - a.marketValue)
-  }, [trades])
+  }, [trades, kpis.invested, cashPosition])
 
   // "Percent of portfolio" by original investment (cost basis), not current
   // market value — how the account's capital is actually split between cash
@@ -215,10 +223,13 @@ export function usePortfolio(account = 'All') {
   // sizing for their own purposes.
   const investmentAllocation = useMemo(() => {
     const grossTotal = kpis.invested + cashPosition
-    const pctOf = (value) => (grossTotal > 0 ? (value / grossTotal) * 100 : 0)
-    const cashEntry = { ticker: 'Cash', value: cashPosition, pct: pctOf(cashPosition) }
+    const cashEntry = {
+      ticker: 'Cash',
+      value: cashPosition,
+      pct: grossTotal > 0 ? (cashPosition / grossTotal) * 100 : 0,
+    }
     const holdingEntries = holdings
-      .map((h) => ({ ticker: h.ticker, value: h.costBasis, pct: pctOf(h.costBasis) }))
+      .map((h) => ({ ticker: h.ticker, value: h.costBasis, pct: h.pctOfPortfolio }))
       .sort((a, b) => b.value - a.value)
     return [cashEntry, ...holdingEntries]
   }, [holdings, kpis.invested, cashPosition])

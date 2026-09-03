@@ -8,6 +8,7 @@ const COLUMNS = [
   { key: 'avgCost', label: 'Avg Cost', numeric: true, currency: true },
   { key: 'currentPrice', label: 'Current Price', numeric: true, currency: true },
   { key: 'marketValue', label: 'Market Value', numeric: true, currency: true },
+  { key: 'pctOfPortfolio', label: '% of Portfolio', numeric: true, percent: true },
   { key: 'unrealizedPnl', label: 'Unrealized $', numeric: true, currency: true, pnl: true },
   { key: 'unrealizedPct', label: 'Unrealized %', numeric: true, percent: true, pnl: true },
 ]
@@ -28,6 +29,14 @@ function formatPercent(value) {
   const num = Number(value)
   if (Number.isNaN(num)) return '—'
   return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`
+}
+
+// Unsigned — unlike unrealizedPct, this is a share-of-total, never a
+// gain/loss, so a "+" prefix would misleadingly read as a gain.
+function formatShare(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return '—'
+  return `${num.toFixed(2)}%`
 }
 
 function pnlClass(value) {
@@ -92,6 +101,7 @@ export default function HoldingsSummaryTable({ holdings }) {
               <td className="is-numeric">{formatCurrency(holding.avgCost)}</td>
               <td className="is-numeric">{formatCurrency(holding.currentPrice)}</td>
               <td className="is-numeric">{formatCurrency(holding.marketValue)}</td>
+              <td className="is-numeric">{formatShare(holding.pctOfPortfolio)}</td>
               <td className={`is-numeric ${pnlClass(holding.unrealizedPnl)}`}>
                 {formatCurrency(holding.unrealizedPnl)}
               </td>
