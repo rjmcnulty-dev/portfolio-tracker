@@ -67,6 +67,13 @@
   color: var(--navy-dark);
 }
 
+.ticker-prices__note-icon {
+  margin-left: 5px;
+  vertical-align: -2px;
+  color: var(--gold);
+  cursor: help;
+}
+
 .is-held-col {
   text-align: center;
   width: 1%;

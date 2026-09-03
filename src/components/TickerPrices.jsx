@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { StickyNote } from 'lucide-react'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import { usePriceTargets } from '../hooks/usePriceTargets'
@@ -103,6 +104,22 @@ export default function TickerPrices() {
     [trades],
   )
   const companyNames = useCompanyNames(tickers)
+
+  // Any trade (any type, not just BUYs) with a non-blank note flags its
+  // ticker here — e.g. a note explaining that a trade's price is a rough
+  // stand-in rather than the real historical cost, so Basis/Gain-Loss for
+  // that ticker shouldn't be taken at face value. Joined with blank lines so
+  // multiple notes on the same ticker are still readable in one tooltip.
+  const notesByTicker = useMemo(() => {
+    const map = new Map()
+    for (const trade of trades) {
+      const note = trade.notes?.trim()
+      if (!note) continue
+      if (!map.has(trade.ticker)) map.set(trade.ticker, [])
+      map.get(trade.ticker).push(note)
+    }
+    return map
+  }, [trades])
 
   // Shares currently held per (ticker, account) — sum of remaining_quantity
   // across that account's open BUY lots, same "open position" definition
@@ -288,10 +305,19 @@ export default function TickerPrices() {
                 const isEditingTarget = editingTargetTicker === ticker
                 const holding = holdingByTicker.get(ticker)
                 const totalPnl = totalPnlByTicker.get(ticker)
+                const tickerNotes = notesByTicker.get(ticker)
                 return (
                   <tr key={ticker}>
                     <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
                       {ticker}
+                      {tickerNotes && (
+                        <StickyNote
+                          size={13}
+                          strokeWidth={2}
+                          className="ticker-prices__note-icon"
+                          title={tickerNotes.join('\n\n')}
+                        />
+                      )}
                     </td>
                     {visibleAccounts.map((account) => {
                       const qty = heldQtyByTickerAccount.get(ticker)?.get(account.name)
