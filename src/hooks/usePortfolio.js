@@ -205,12 +205,31 @@ export function usePortfolio(account = 'All') {
       .sort((a, b) => b.marketValue - a.marketValue)
   }, [trades])
 
+  // "Percent of portfolio" by original investment (cost basis), not current
+  // market value — how the account's capital is actually split between cash
+  // and each position, unlike `allocation` above (today's market value,
+  // which drifts with price and doesn't include cash at all). Cash sits
+  // first, since it's the baseline every position was drawn down from.
+  // Distinct from `allocation` rather than replacing it, since AllocationDonut
+  // and buildPortfolioContext both intentionally use current-market-value
+  // sizing for their own purposes.
+  const investmentAllocation = useMemo(() => {
+    const grossTotal = kpis.invested + cashPosition
+    const pctOf = (value) => (grossTotal > 0 ? (value / grossTotal) * 100 : 0)
+    const cashEntry = { ticker: 'Cash', value: cashPosition, pct: pctOf(cashPosition) }
+    const holdingEntries = holdings
+      .map((h) => ({ ticker: h.ticker, value: h.costBasis, pct: pctOf(h.costBasis) }))
+      .sort((a, b) => b.value - a.value)
+    return [cashEntry, ...holdingEntries]
+  }, [holdings, kpis.invested, cashPosition])
+
   return {
     trades,
     loading,
     error,
     kpis,
     allocation,
+    investmentAllocation,
     pnlByTicker,
     holdings,
     cashPosition,

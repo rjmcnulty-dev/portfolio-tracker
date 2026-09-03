@@ -63,7 +63,7 @@ export default function AccountPage() {
 }
 
 function AccountPageContent({ accountLabel }) {
-  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
+  const { trades, loading, error, kpis, investmentAllocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio(accountLabel)
   const [showEvaluator, setShowEvaluator] = useState(false)
   // Shared by both charts below so picking a range or custom date on either
@@ -112,7 +112,7 @@ function AccountPageContent({ accountLabel }) {
                 label: 'Charts',
                 render: () => (
                   <div className="chart-grid">
-                    <AllocationDonut allocation={allocation} />
+                    <AllocationDonut allocation={investmentAllocation} />
                     <PnLBarChart data={pnlByTicker} />
                   </div>
                 ),

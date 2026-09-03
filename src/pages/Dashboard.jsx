@@ -14,7 +14,7 @@ import PerformanceEvaluator from '../components/PerformanceEvaluator'
 import DailyGainsTable from '../components/DailyGainsTable'
 
 export default function Dashboard() {
-  const { trades, loading, error, kpis, allocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
+  const { trades, loading, error, kpis, investmentAllocation, pnlByTicker, holdings, cashPosition, deleteTrade } =
     usePortfolio('All')
   const [showEvaluator, setShowEvaluator] = useState(false)
   const dateRange = useDateRange()
@@ -59,7 +59,7 @@ export default function Dashboard() {
                 label: 'Charts',
                 render: () => (
                   <div className="chart-grid">
-                    <AllocationDonut allocation={allocation} />
+                    <AllocationDonut allocation={investmentAllocation} />
                     <PnLBarChart data={pnlByTicker} />
                   </div>
                 ),
