@@ -116,7 +116,7 @@ export default function TickerPrices() {
       const note = trade.notes?.trim()
       if (!note) continue
       if (!map.has(trade.ticker)) map.set(trade.ticker, [])
-      map.get(trade.ticker).push(note)
+      map.get(trade.ticker).push(`[${trade.trade_date}] ${note}`)
     }
     return map
   }, [trades])
