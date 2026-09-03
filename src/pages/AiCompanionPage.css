@@ -74,3 +74,65 @@
 .ai-companion__input-row textarea:disabled {
   background: var(--surface);
 }
+
+.ai-companion__history {
+  position: relative;
+}
+
+.ai-companion__history-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 320px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e2e6eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.ai-companion__history-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.ai-companion__history-item {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-companion__history-item:hover {
+  background: #f2f4f7;
+}
+
+.ai-companion__history-item.is-active {
+  background: var(--surface);
+}
+
+.ai-companion__history-item-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-companion__history-item-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}

@@ -16,22 +16,47 @@ export default function AiCompanionPage() {
     portfolioContextRef.current = buildPortfolioContext({ kpis, holdings, allocation, cashPosition, trades })
   }
 
-  const { messages, sending, error, sendMessage, clearConversation, sessionUsage } = useAiCompanion(
-    portfolioContextRef.current,
-  )
+  const {
+    messages,
+    sending,
+    error,
+    sendMessage,
+    clearConversation,
+    sessionUsage,
+    conversations,
+    conversationId,
+    loadConversation,
+    loadingHistory,
+  } = useAiCompanion(portfolioContextRef.current)
   const [draft, setDraft] = useState('')
   const [showUsageModal, setShowUsageModal] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const listRef = useRef(null)
+  const historyRef = useRef(null)
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, sending])
+
+  useEffect(() => {
+    if (!historyOpen) return
+    function handleClickOutside(event) {
+      if (historyRef.current && !historyRef.current.contains(event.target)) setHistoryOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [historyOpen])
 
   function handleSubmit(event) {
     event.preventDefault()
     if (!draft.trim() || sending) return
     sendMessage(draft)
     setDraft('')
+  }
+
+  function handleSelectConversation(id) {
+    setHistoryOpen(false)
+    if (id !== conversationId) loadConversation(id)
   }
 
   return (
@@ -45,6 +70,35 @@ export default function AiCompanionPage() {
           </p>
         </div>
         <div className="filters">
+          <div className="ai-companion__history" ref={historyRef}>
+            <button
+              className="btn btn--ghost"
+              disabled={sending}
+              onClick={() => setHistoryOpen((open) => !open)}
+            >
+              History{conversations.length > 0 ? ` (${conversations.length})` : ''}
+            </button>
+            {historyOpen && (
+              <div className="ai-companion__history-menu">
+                {conversations.length === 0 ? (
+                  <p className="ai-companion__history-empty">No past conversations yet.</p>
+                ) : (
+                  conversations.map((c) => (
+                    <button
+                      key={c.id}
+                      className={`ai-companion__history-item ${c.id === conversationId ? 'is-active' : ''}`}
+                      onClick={() => handleSelectConversation(c.id)}
+                    >
+                      <span className="ai-companion__history-item-title">{c.title}</span>
+                      <span className="ai-companion__history-item-date">
+                        {new Date(c.updated_at).toLocaleString()}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <button className="btn btn--ghost" onClick={() => setShowUsageModal(true)}>
             Token Usage
           </button>
@@ -58,7 +112,9 @@ export default function AiCompanionPage() {
 
       <div className="ai-companion">
         <div className="ai-companion__messages" ref={listRef}>
-          {messages.length === 0 ? (
+          {loadingHistory ? (
+            <p className="ai-companion__empty">Loading…</p>
+          ) : messages.length === 0 ? (
             <p className="ai-companion__empty">Ask it anything to get started.</p>
           ) : (
             messages.map((message, index) => (

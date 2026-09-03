@@ -1679,21 +1679,21 @@ zero-downtime transition as the Edge Functions.
 
 ## AI Companion
 
-A chat page (`/ai-companion`, gated behind the same login as `/admin` — see "Admin / Auth")
-that talks to Claude via the Anthropic API, with a snapshot of the current portfolio as
-context so it can actually answer questions about holdings/P&L/cash rather than a plain
-generic chatbot.
+A chat page (`/ai-companion`) that talks to Claude via the Anthropic API, with a snapshot of
+the current portfolio as context so it can actually answer questions about holdings/P&L/cash
+rather than a plain generic chatbot.
 
 **Setup**: get an API key from [console.anthropic.com](https://console.anthropic.com), then
 set it from `/admin`'s Secrets tab (`anthropic_api_key`, added to the same `ALLOWED_KEYS` set
 as the Twelve Data/Finnhub keys — see "Encrypted secrets" above; same encryption, same
 storage, same never-echoed-back guarantee).
 
-**Why this one requires login, unlike everything else in this app**: every other Edge
-Function here is free (or on a fixed-cost external API budget); this one is metered,
-pay-per-token, on your own Anthropic account. `supabase/functions/ai-companion/index.ts` uses
-`verify_jwt = true` plus the same explicit `auth.getUser()` check as `manage-secret` — a
-deliberate cost gate, not just an access-control one.
+**This Edge Function has its own explicit auth check, not just the app-wide login**: every
+other Edge Function here is free (or on a fixed-cost external API budget); this one is
+metered, pay-per-token, on your own Anthropic account. `supabase/functions/ai-companion/index.ts`
+uses `verify_jwt = true` plus the same explicit `auth.getUser()` check as `manage-secret` — a
+deliberate cost gate on top of the app-wide login (see "Admin / Auth"), not relying on that
+alone.
 
 **Portfolio context**: `src/lib/portfolioContext.js`'s `buildPortfolioContext()` turns the
 already-computed `usePortfolio('All')` values (KPIs, holdings, allocation, cash position —
@@ -1722,9 +1722,52 @@ truncating — a stuck retry loop or a huge pasted block can't run up an unbound
 single request.
 
 **Scoped out on purpose**: streaming responses (real complexity — SSE through an Edge
-Function — for mostly cosmetic benefit at single-user scale) and persisted conversation
-history (a new table, only worth it if chats need to survive a page refresh; currently
-in-memory only, reset by "New Conversation" or a reload).
+Function — for mostly cosmetic benefit at single-user scale).
+
+### Conversation history
+
+Conversations persist to `ai_conversations`/`ai_messages` (both authenticated-only RLS, same
+as every other personal-data table — see "Admin / Auth") rather than living only in React
+state, so navigating away from `/ai-companion`, a refresh, or coming back tomorrow all
+resume exactly where you left off — the page loads the most recently active conversation on
+mount. **History** in the page header opens a dropdown of every past conversation (title
+auto-derived from its first message, truncated to 60 characters, plus a last-updated
+timestamp); clicking one swaps the chat view to it. **New Conversation** clears the chat view
+without touching any stored data — the conversation it's replacing stays exactly as it was in
+history, and the new one isn't written to the DB until its first message is actually sent, so
+switching to a new conversation and changing your mind leaves no empty row behind.
+
+```sql
+create table if not exists ai_conversations (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists ai_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references ai_conversations(id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists ai_messages_conversation_id_idx on ai_messages(conversation_id, created_at);
+
+alter table ai_conversations enable row level security;
+alter table ai_messages enable row level security;
+
+create policy "Authenticated access on ai_conversations" on ai_conversations for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Authenticated access on ai_messages" on ai_messages for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+```
+
+`sessionUsage` (the Token Usage modal's "This Session" figure) resets when switching
+conversations, same as it always did on "New Conversation" — it's a live running total for
+whatever's active in this browser tab right now, not a persisted per-conversation figure;
+`ai_usage_log`'s "All Time" total is unaffected either way.
 
 ### Token Usage modal
 
