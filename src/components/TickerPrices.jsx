@@ -46,6 +46,14 @@ export default function TickerPrices() {
   // (AccountPage, Portfolio Stocks), so filtering this page by account is
   // just passing a different value through, not new fetch/aggregation logic.
   const [selectedAccount, setSelectedAccount] = useState('All')
+  // With one account selected there's exactly one held-quantity value per
+  // ticker anyway, so every other account's column is just dead space —
+  // collapse to the selected account's own column, and add a Basis column
+  // (average cost/share across that account's open BUY lots) since it's now
+  // unambiguous, unlike in the All view where a ticker held across multiple
+  // accounts has no single basis to show in one column.
+  const isSingleAccount = selectedAccount !== 'All'
+  const visibleAccounts = isSingleAccount ? accounts.filter((a) => a.name === selectedAccount) : accounts
   const { trades, loading: tradesLoading, holdings, pnlByTicker } = usePortfolio(selectedAccount)
   const { prices, loading: pricesLoading, error, updatePrice, refreshAll, refreshOne } = useTickerPrices()
   const { targets, updateTarget } = usePriceTargets()
@@ -256,11 +264,12 @@ export default function TickerPrices() {
             <thead>
               <tr>
                 <th>Ticker</th>
-                {accounts.map((account) => (
+                {visibleAccounts.map((account) => (
                   <th key={account.id} className="is-held-col">
                     {account.name}
                   </th>
                 ))}
+                {isSingleAccount && <th className="is-numeric">Basis</th>}
                 <th className="is-numeric">Current Price</th>
                 <th>As Of</th>
                 <th className="is-numeric">Open Gain/Loss</th>
@@ -284,7 +293,7 @@ export default function TickerPrices() {
                     <td className="ticker-prices__ticker" title={companyNames[ticker] || ticker}>
                       {ticker}
                     </td>
-                    {accounts.map((account) => {
+                    {visibleAccounts.map((account) => {
                       const qty = heldQtyByTickerAccount.get(ticker)?.get(account.name)
                       return (
                         <td key={account.id} className="is-held-col">
@@ -292,6 +301,9 @@ export default function TickerPrices() {
                         </td>
                       )
                     })}
+                    {isSingleAccount && (
+                      <td className="is-numeric">{holding ? formatCurrency(holding.avgCost) : '—'}</td>
+                    )}
                     <td className="is-numeric">
                       {isEditing ? (
                         <input
@@ -376,9 +388,10 @@ export default function TickerPrices() {
             <tfoot>
               <tr className="ticker-prices__totals-row">
                 <td>Totals</td>
-                {accounts.map((account) => (
+                {visibleAccounts.map((account) => (
                   <td key={account.id} className="is-held-col"></td>
                 ))}
+                {isSingleAccount && <td className="is-numeric"></td>}
                 <td className="is-numeric"></td>
                 <td></td>
                 <td className={`is-numeric ${pnlClass(totals.openGainLoss)}`}>
