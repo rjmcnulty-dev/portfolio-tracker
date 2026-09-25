@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 export function useProfile(userId) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (!userId) {
@@ -22,8 +23,18 @@ export function useProfile(userId) {
       .select('is_admin')
       .eq('user_id', userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error: fetchError }) => {
         if (ignore) return
+        if (fetchError) {
+          // Surfaced so a real fetch failure (e.g. a stale PostgREST schema
+          // cache right after this table was created) is distinguishable
+          // from "genuinely not an admin" in the console, instead of both
+          // silently landing on the same is_admin-false redirect.
+          console.error('[useProfile] failed to load profile:', fetchError.message)
+          setError(fetchError.message)
+        } else {
+          setError(null)
+        }
         setProfile(data)
         setLoading(false)
       })
@@ -33,5 +44,5 @@ export function useProfile(userId) {
     }
   }, [userId])
 
-  return { profile, loading }
+  return { profile, loading, error }
 }
