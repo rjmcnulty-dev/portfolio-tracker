@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 import { useAccounts } from '../hooks/useAccounts'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './DepositForm.css'
@@ -28,6 +29,7 @@ function toFormState(deposit) {
 }
 
 export default function DepositForm({ deposit, onClose, onSaved }) {
+  const { user } = useAuth()
   const { accounts, error: accountsError } = useAccounts()
   const DEPOSIT_TYPES = useConfigValue('deposit_types', DEFAULT_DEPOSIT_TYPES)
   const [form, setForm] = useState(() => (deposit ? toFormState(deposit) : { ...EMPTY_DEPOSIT }))
@@ -60,7 +62,7 @@ export default function DepositForm({ deposit, onClose, onSaved }) {
 
     const { error: saveError } = deposit?.id
       ? await supabase.from('deposits').update(payload).eq('id', deposit.id)
-      : await supabase.from('deposits').insert(payload)
+      : await supabase.from('deposits').insert({ ...payload, user_id: user.id })
 
     setSaving(false)
 

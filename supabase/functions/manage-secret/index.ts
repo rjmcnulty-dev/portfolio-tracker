@@ -58,6 +58,19 @@ Deno.serve(async (req) => {
     return json({ error: "Unauthorized" }, 401);
   }
 
+  // Being logged in isn't enough — these are the shared Twelve Data/Finnhub/
+  // Anthropic keys the whole app runs on, so only an admin may touch them.
+  // profiles' RLS allows self-select, so the caller's own client can answer
+  // this without needing the service-role client at all.
+  const { data: profile } = await callerClient
+    .from("profiles")
+    .select("is_admin")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+  if (!profile?.is_admin) {
+    return json({ error: "Forbidden — admin only" }, 403);
+  }
+
   let body: { action?: string; key?: string; value?: string };
   try {
     body = await req.json();

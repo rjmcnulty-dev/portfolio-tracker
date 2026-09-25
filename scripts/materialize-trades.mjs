@@ -114,6 +114,7 @@ async function main() {
         wash_sale_risk: 'OK',
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : 'Auto-generated recurring trade',
+        user_id: schedule.user_id,
       })
     }
   }

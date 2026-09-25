@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useAccounts } from '../hooks/useAccounts'
 import { useAuth } from '../hooks/useAuth'
+import { useProfile } from '../hooks/useProfile'
 import { useConfigValue } from '../hooks/useAppConfig'
 import { useTradeTypes } from '../hooks/useTradeTypes'
 import { slugify } from '../lib/accounts'
@@ -78,6 +79,7 @@ function loadToolOrder() {
 
 export default function Layout() {
   const { user, signOut } = useAuth()
+  const { profile } = useProfile(user?.id)
   const { accounts, addAccount, deleteAccount, moveAccount, error: accountsError } = useAccounts()
   const [showManageAccounts, setShowManageAccounts] = useState(false)
   const [showManageTools, setShowManageTools] = useState(false)
@@ -101,7 +103,10 @@ export default function Layout() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed))
   }, [sidebarCollapsed])
 
-  const orderedTools = toolOrder.map((key) => TOOL_LINKS.find((t) => t.key === key)).filter(Boolean)
+  const orderedTools = toolOrder
+    .map((key) => TOOL_LINKS.find((t) => t.key === key))
+    .filter(Boolean)
+    .filter((tool) => tool.key !== 'admin' || profile?.is_admin)
 
   function handleMoveTool(key, direction) {
     setToolOrder((prev) => {

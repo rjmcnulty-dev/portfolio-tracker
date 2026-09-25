@@ -140,13 +140,13 @@ async function main() {
 
   const { data: trades, error: tradesError } = await supabase
     .from('trades')
-    .select('ticker, trade_type, quantity, price, fees, cost_basis, trade_date, account')
+    .select('ticker, trade_type, quantity, price, fees, cost_basis, trade_date, account, user_id')
     .order('trade_date', { ascending: true })
   if (tradesError) throw tradesError
 
   const { data: deposits, error: depositsError } = await supabase
     .from('deposits')
-    .select('amount, deposit_date, account')
+    .select('amount, deposit_date, account, user_id')
     .order('deposit_date', { ascending: true })
   if (depositsError) throw depositsError
 
@@ -212,18 +212,29 @@ async function main() {
     depositsByDate.get(deposit.deposit_date).push(deposit)
   }
 
-  const overallState = { cash: 0, quantityByTicker: new Map() }
-  const accountStates = new Map() // account -> { cash, quantityByTicker }
+  // Every user's trades/deposits now coexist in these tables — track each
+  // user's overall state (for portfolio_value_history) and, nested inside
+  // it, each of their own accounts' state (for account_value_history), so
+  // one user's activity never bleeds into another's running totals.
+  const userStates = new Map() // user_id -> { cash, quantityByTicker, accountStates }
 
-  function getAccountState(account) {
+  function getUserState(userId) {
+    if (!userStates.has(userId)) {
+      userStates.set(userId, { cash: 0, quantityByTicker: new Map(), accountStates: new Map() })
+    }
+    return userStates.get(userId)
+  }
+
+  function getAccountState(userId, account) {
+    const accountStates = getUserState(userId).accountStates
     if (!accountStates.has(account)) accountStates.set(account, { cash: 0, quantityByTicker: new Map() })
     return accountStates.get(account)
   }
 
   function applyDeposit(deposit) {
     const amount = Number(deposit.amount) || 0
-    overallState.cash += amount
-    getAccountState(deposit.account).cash += amount
+    getUserState(deposit.user_id).cash += amount
+    getAccountState(deposit.user_id, deposit.account).cash += amount
   }
 
   // Same cash-position formula as usePortfolio.js: a cash-deducting buy-lot
@@ -242,13 +253,11 @@ async function main() {
     const signedQty = isBuy ? qty : isSell ? -qty : 0
     const cashDelta = isBuy ? (deductsCash.has(trade.trade_type) ? -costBasis : 0) : isSell ? qty * price - fees : 0
 
-    overallState.cash += cashDelta
-    overallState.quantityByTicker.set(
-      trade.ticker,
-      (overallState.quantityByTicker.get(trade.ticker) || 0) + signedQty,
-    )
+    const userState = getUserState(trade.user_id)
+    userState.cash += cashDelta
+    userState.quantityByTicker.set(trade.ticker, (userState.quantityByTicker.get(trade.ticker) || 0) + signedQty)
 
-    const accountState = getAccountState(trade.account)
+    const accountState = getAccountState(trade.user_id, trade.account)
     accountState.cash += cashDelta
     accountState.quantityByTicker.set(trade.ticker, (accountState.quantityByTicker.get(trade.ticker) || 0) + signedQty)
   }
@@ -262,19 +271,21 @@ async function main() {
     for (const deposit of depositsByDate.get(date) ?? []) applyDeposit(deposit)
     for (const trade of tradesByDate.get(date) ?? []) applyTrade(trade)
 
-    const overallHoldings = computeHoldingsValue(overallState.quantityByTicker, date, priceCursors)
-    if (overallHoldings.complete) {
-      portfolioRows.push({ snapshot_date: date, total_value: overallState.cash + overallHoldings.total })
-    } else {
-      skippedDays += 1
-    }
-
-    for (const [account, state] of accountStates) {
-      const holdings = computeHoldingsValue(state.quantityByTicker, date, priceCursors)
-      if (holdings.complete) {
-        accountRows.push({ account, snapshot_date: date, total_value: state.cash + holdings.total })
+    for (const [userId, userState] of userStates) {
+      const overallHoldings = computeHoldingsValue(userState.quantityByTicker, date, priceCursors)
+      if (overallHoldings.complete) {
+        portfolioRows.push({ user_id: userId, snapshot_date: date, total_value: userState.cash + overallHoldings.total })
       } else {
-        skippedAccountDays += 1
+        skippedDays += 1
+      }
+
+      for (const [account, state] of userState.accountStates) {
+        const holdings = computeHoldingsValue(state.quantityByTicker, date, priceCursors)
+        if (holdings.complete) {
+          accountRows.push({ user_id: userId, account, snapshot_date: date, total_value: state.cash + holdings.total })
+        } else {
+          skippedAccountDays += 1
+        }
       }
     }
   }
@@ -287,14 +298,14 @@ async function main() {
   if (portfolioRows.length) {
     const { error: upsertError } = await supabase
       .from('portfolio_value_history')
-      .upsert(portfolioRows, { onConflict: 'snapshot_date' })
+      .upsert(portfolioRows, { onConflict: 'user_id,snapshot_date' })
     if (upsertError) throw upsertError
   }
 
   if (accountRows.length) {
     const { error: accountUpsertError } = await supabase
       .from('account_value_history')
-      .upsert(accountRows, { onConflict: 'account,snapshot_date' })
+      .upsert(accountRows, { onConflict: 'user_id,account,snapshot_date' })
     if (accountUpsertError) throw accountUpsertError
   }
 

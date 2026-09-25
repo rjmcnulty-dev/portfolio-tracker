@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 export function useDeposits(account = 'All') {
+  const { user } = useAuth()
   const [deposits, setDeposits] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,11 +43,11 @@ export function useDeposits(account = 'All') {
 
   const addDeposit = useCallback(
     async (deposit) => {
-      const { error: insertError } = await supabase.from('deposits').insert(deposit)
+      const { error: insertError } = await supabase.from('deposits').insert({ ...deposit, user_id: user.id })
       if (insertError) throw insertError
       await fetchDeposits()
     },
-    [fetchDeposits],
+    [fetchDeposits, user],
   )
 
   const updateDeposit = useCallback(

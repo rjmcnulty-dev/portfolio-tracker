@@ -114,10 +114,12 @@ async function main() {
 
   const { data: trades, error: tradesError } = await supabase
     .from('trades')
-    .select('ticker, trade_type, quantity, price, fees, cost_basis, account')
+    .select('ticker, trade_type, quantity, price, fees, cost_basis, account, user_id')
   if (tradesError) throw tradesError
 
-  const { data: deposits, error: depositsError } = await supabase.from('deposits').select('amount, account')
+  const { data: deposits, error: depositsError } = await supabase
+    .from('deposits')
+    .select('amount, account, user_id')
   if (depositsError) throw depositsError
 
   // Benchmark tickers (e.g. SPY/QQQ/DIA) are never traded, so they'd
@@ -171,42 +173,82 @@ async function main() {
 
   console.log(`Updated prices for ${rows.length} ticker(s): ${rows.map((r) => r.ticker).join(', ')}`)
 
-  const totalValue =
-    computeCashPosition(deposits, trades, buyLot, deductsCash) +
-    computeHoldingsValue(computeQuantitiesByTicker(trades, buyLot), quotes)
-  const { error: snapshotError } = await supabase
-    .from('portfolio_value_history')
-    .upsert({ snapshot_date: asOf, total_value: totalValue }, { onConflict: 'snapshot_date' })
-  if (snapshotError) throw snapshotError
-
-  const tradesByAccount = new Map()
+  // Every user's trades/deposits now coexist in these tables — group by
+  // user_id first, so each person's portfolio total (and their own
+  // per-account breakdown below) is computed independently rather than
+  // accidentally mixed into one shared grand total.
+  const tradesByUser = new Map()
   for (const trade of trades) {
-    if (!tradesByAccount.has(trade.account)) tradesByAccount.set(trade.account, [])
-    tradesByAccount.get(trade.account).push(trade)
+    if (!tradesByUser.has(trade.user_id)) tradesByUser.set(trade.user_id, [])
+    tradesByUser.get(trade.user_id).push(trade)
   }
-  const depositsByAccount = new Map()
+  const depositsByUser = new Map()
   for (const deposit of deposits) {
-    if (!depositsByAccount.has(deposit.account)) depositsByAccount.set(deposit.account, [])
-    depositsByAccount.get(deposit.account).push(deposit)
+    if (!depositsByUser.has(deposit.user_id)) depositsByUser.set(deposit.user_id, [])
+    depositsByUser.get(deposit.user_id).push(deposit)
   }
-  // Union of both maps' keys — an account with deposits but no trades yet
-  // (or vice versa) still has a real, non-zero value and shouldn't be
-  // silently dropped from account_value_history.
-  const accountsWithActivity = new Set([...tradesByAccount.keys(), ...depositsByAccount.keys()])
-  const accountRows = [...accountsWithActivity].map((account) => ({
-    account,
-    snapshot_date: asOf,
-    total_value:
-      computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? [], buyLot, deductsCash) +
-      computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? [], buyLot), quotes),
-  }))
+  const usersWithActivity = new Set([...tradesByUser.keys(), ...depositsByUser.keys()])
 
-  const { error: accountSnapshotError } = await supabase
-    .from('account_value_history')
-    .upsert(accountRows, { onConflict: 'account,snapshot_date' })
-  if (accountSnapshotError) throw accountSnapshotError
+  const portfolioRows = [...usersWithActivity].map((userId) => {
+    const userTrades = tradesByUser.get(userId) ?? []
+    const userDeposits = depositsByUser.get(userId) ?? []
+    return {
+      user_id: userId,
+      snapshot_date: asOf,
+      total_value:
+        computeCashPosition(userDeposits, userTrades, buyLot, deductsCash) +
+        computeHoldingsValue(computeQuantitiesByTicker(userTrades, buyLot), quotes),
+    }
+  })
 
-  console.log(`Recorded portfolio value snapshot for ${asOf}: $${totalValue.toFixed(2)} (${accountRows.length} account(s))`)
+  if (portfolioRows.length) {
+    const { error: snapshotError } = await supabase
+      .from('portfolio_value_history')
+      .upsert(portfolioRows, { onConflict: 'user_id,snapshot_date' })
+    if (snapshotError) throw snapshotError
+  }
+
+  const accountRows = []
+  for (const userId of usersWithActivity) {
+    const userTrades = tradesByUser.get(userId) ?? []
+    const userDeposits = depositsByUser.get(userId) ?? []
+
+    const tradesByAccount = new Map()
+    for (const trade of userTrades) {
+      if (!tradesByAccount.has(trade.account)) tradesByAccount.set(trade.account, [])
+      tradesByAccount.get(trade.account).push(trade)
+    }
+    const depositsByAccount = new Map()
+    for (const deposit of userDeposits) {
+      if (!depositsByAccount.has(deposit.account)) depositsByAccount.set(deposit.account, [])
+      depositsByAccount.get(deposit.account).push(deposit)
+    }
+    // Union of both maps' keys — an account with deposits but no trades yet
+    // (or vice versa) still has a real, non-zero value and shouldn't be
+    // silently dropped from account_value_history.
+    const accountsWithActivity = new Set([...tradesByAccount.keys(), ...depositsByAccount.keys()])
+    for (const account of accountsWithActivity) {
+      accountRows.push({
+        user_id: userId,
+        account,
+        snapshot_date: asOf,
+        total_value:
+          computeCashPosition(depositsByAccount.get(account) ?? [], tradesByAccount.get(account) ?? [], buyLot, deductsCash) +
+          computeHoldingsValue(computeQuantitiesByTicker(tradesByAccount.get(account) ?? [], buyLot), quotes),
+      })
+    }
+  }
+
+  if (accountRows.length) {
+    const { error: accountSnapshotError } = await supabase
+      .from('account_value_history')
+      .upsert(accountRows, { onConflict: 'user_id,account,snapshot_date' })
+    if (accountSnapshotError) throw accountSnapshotError
+  }
+
+  console.log(
+    `Recorded portfolio value snapshots for ${asOf}: ${portfolioRows.length} user(s), ${accountRows.length} account(s) total`,
+  )
 }
 
 main().catch((err) => {

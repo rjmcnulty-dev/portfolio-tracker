@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 import { useAccounts } from '../hooks/useAccounts'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './DepositForm.css'
@@ -39,6 +40,7 @@ function toFormState(schedule) {
 }
 
 export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
+  const { user } = useAuth()
   const { accounts, error: accountsError } = useAccounts()
   const FREQUENCIES = useConfigValue('recurring_frequencies', DEFAULT_FREQUENCIES)
   const DEPOSIT_TYPES = useConfigValue('deposit_types', DEFAULT_DEPOSIT_TYPES)
@@ -75,7 +77,7 @@ export default function DepositScheduleForm({ schedule, onClose, onSaved }) {
 
     const { error: saveError } = schedule?.id
       ? await supabase.from('deposit_schedules').update(payload).eq('id', schedule.id)
-      : await supabase.from('deposit_schedules').insert(payload)
+      : await supabase.from('deposit_schedules').insert({ ...payload, user_id: user.id })
 
     setSaving(false)
 

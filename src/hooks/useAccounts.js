@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 export function useAccounts() {
+  const { user } = useAuth()
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -42,11 +44,13 @@ export function useAccounts() {
       if (lastError) throw lastError
       const nextOrder = (lastAccount?.sort_order ?? -1) + 1
 
-      const { error: insertError } = await supabase.from('accounts').insert({ name: trimmed, sort_order: nextOrder })
+      const { error: insertError } = await supabase
+        .from('accounts')
+        .insert({ name: trimmed, sort_order: nextOrder, user_id: user.id })
       if (insertError) throw insertError
       await fetchAccounts()
     },
-    [fetchAccounts],
+    [fetchAccounts, user],
   )
 
   // Swaps sort_order with the adjacent account so the move is a single

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 import { EMPTY_USAGE, sumUsage } from '../lib/aiUsagePricing'
 
 const TITLE_MAX_CHARS = 60
@@ -47,6 +48,7 @@ async function describeError(err) {
 // lets the Edge Function's cache_control breakpoint on it actually hit
 // after the first message, not just a token-count optimization.
 export function useAiCompanion(portfolioContext) {
+  const { user } = useAuth()
   const [messages, setMessages] = useState([])
   const [conversationId, setConversationId] = useState(null)
   const [conversations, setConversations] = useState([])
@@ -126,7 +128,7 @@ export function useAiCompanion(portfolioContext) {
         if (!convId) {
           const { data: convo, error: convoError } = await supabase
             .from('ai_conversations')
-            .insert({ title: deriveTitle(trimmed) })
+            .insert({ title: deriveTitle(trimmed), user_id: user.id })
             .select('id, title, updated_at')
             .single()
           if (convoError) throw convoError
@@ -137,7 +139,7 @@ export function useAiCompanion(portfolioContext) {
 
         const { error: userInsertError } = await supabase
           .from('ai_messages')
-          .insert({ conversation_id: convId, role: 'user', content: trimmed })
+          .insert({ conversation_id: convId, role: 'user', content: trimmed, user_id: user.id })
         if (userInsertError) throw userInsertError
 
         const { data, error: invokeError } = await supabase.functions.invoke('ai-companion', {
@@ -154,7 +156,9 @@ export function useAiCompanion(portfolioContext) {
         setMessages([...nextMessages, { role: 'assistant', content: data.reply }])
 
         const updatedAt = new Date().toISOString()
-        await supabase.from('ai_messages').insert({ conversation_id: convId, role: 'assistant', content: data.reply })
+        await supabase
+          .from('ai_messages')
+          .insert({ conversation_id: convId, role: 'assistant', content: data.reply, user_id: user.id })
         await supabase.from('ai_conversations').update({ updated_at: updatedAt }).eq('id', convId)
         setConversations((prev) =>
           sortByUpdatedDesc(prev.map((c) => (c.id === convId ? { ...c, updated_at: updatedAt } : c))),
@@ -165,7 +169,7 @@ export function useAiCompanion(portfolioContext) {
         setSending(false)
       }
     },
-    [messages, conversationId, portfolioContext],
+    [messages, conversationId, portfolioContext, user],
   )
 
   const clearConversation = useCallback(() => {

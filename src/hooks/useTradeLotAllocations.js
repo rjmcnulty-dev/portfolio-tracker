@@ -1,11 +1,13 @@
 import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { getBuyLotValues } from '../lib/tradeTypes'
+import { useAuth } from './useAuth'
 
 // Not a passive fetch-on-mount hook — lot data is only needed while editing
 // a SELL trade, scoped to whatever ticker/account/trade is currently being
 // edited, so callers fetch on demand rather than subscribing continuously.
 export function useTradeLotAllocations() {
+  const { user } = useAuth()
   // Open BUY lots for a ticker+account, annotated with remaining (unsold)
   // quantity. excludeSellTradeId lets an in-progress edit ignore its own
   // prior allocations when computing what's still available.
@@ -61,11 +63,12 @@ export function useTradeLotAllocations() {
       buy_trade_id: a.buy_trade_id,
       quantity: a.quantity,
       cost_basis: a.cost_basis,
+      user_id: user.id,
     }))
 
     const { error: insertError } = await supabase.from('trade_lot_allocations').insert(rows)
     if (insertError) throw insertError
-  }, [])
+  }, [user])
 
   return { fetchOpenLots, fetchAllocationsForSell, saveAllocationsForSell }
 }

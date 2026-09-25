@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 // Mirrors useTickerPrices.js's shape — a plain ticker-keyed map, set
 // manually per ticker (no external API, since analyst price targets aren't
 // available on the free-tier APIs this app otherwise uses).
 export function usePriceTargets() {
+  const { user } = useAuth()
   const [targets, setTargets] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -33,13 +35,13 @@ export function usePriceTargets() {
   const updateTarget = useCallback(
     async (ticker, targetPrice) => {
       const { error: upsertError } = await supabase.from('price_targets').upsert(
-        { ticker, target_price: Number(targetPrice), updated_at: new Date().toISOString() },
-        { onConflict: 'ticker' },
+        { ticker, target_price: Number(targetPrice), updated_at: new Date().toISOString(), user_id: user.id },
+        { onConflict: 'user_id,ticker' },
       )
       if (upsertError) throw upsertError
       await fetchTargets()
     },
-    [fetchTargets],
+    [fetchTargets, user],
   )
 
   return { targets, loading, error, updateTarget, refetch: fetchTargets }

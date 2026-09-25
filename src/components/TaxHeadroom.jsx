@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './TaxHeadroom.css'
 
@@ -18,6 +19,7 @@ const EMPTY_SETTINGS = {
 }
 
 export default function TaxHeadroom() {
+  const { user } = useAuth()
   const filingStatuses = useConfigValue('tax_filing_statuses', DEFAULT_FILING_STATUSES)
   const [settings, setSettings] = useState(EMPTY_SETTINGS)
   const [loading, setLoading] = useState(true)
@@ -62,9 +64,12 @@ export default function TaxHeadroom() {
       magi_ytd: Number(settings.magi_ytd) || 0,
       target_bracket_ceiling: Number(settings.target_bracket_ceiling) || 0,
       notes: settings.notes,
+      user_id: user.id,
     }
 
-    const { error: saveError } = await supabase.from('tax_settings').upsert(payload, { onConflict: 'year' })
+    const { error: saveError } = await supabase
+      .from('tax_settings')
+      .upsert(payload, { onConflict: 'user_id,year' })
 
     setSaving(false)
     if (saveError) setError(saveError.message)

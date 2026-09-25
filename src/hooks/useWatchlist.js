@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 export function useWatchlist() {
+  const { user } = useAuth()
   const [watchlist, setWatchlist] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -30,11 +32,11 @@ export function useWatchlist() {
     async (ticker, notes = '') => {
       const { error: insertError } = await supabase
         .from('watchlist')
-        .insert({ ticker: ticker.trim().toUpperCase(), notes })
+        .insert({ ticker: ticker.trim().toUpperCase(), notes, user_id: user.id })
       if (insertError) throw insertError
       await fetchWatchlist()
     },
-    [fetchWatchlist],
+    [fetchWatchlist, user],
   )
 
   const updateNotes = useCallback(

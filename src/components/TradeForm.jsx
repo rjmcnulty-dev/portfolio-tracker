@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 import { useAccounts } from '../hooks/useAccounts'
 import { useTradeLotAllocations } from '../hooks/useTradeLotAllocations'
 import { useTradeTypes } from '../hooks/useTradeTypes'
@@ -56,6 +57,7 @@ function computeRealizedPnl(quantity, price, fees, openLots, allocations) {
 }
 
 export default function TradeForm({ trade, onClose, onSaved }) {
+  const { user } = useAuth()
   const { accounts, error: accountsError } = useAccounts()
   const { tradeTypes } = useTradeTypes()
   const { fetchOpenLots, fetchAllocationsForSell, saveAllocationsForSell } = useTradeLotAllocations()
@@ -202,7 +204,7 @@ export default function TradeForm({ trade, onClose, onSaved }) {
 
     const { data: savedTrade, error: saveError } = trade?.id
       ? await supabase.from('trades').update(payload).eq('id', trade.id).select().single()
-      : await supabase.from('trades').insert(payload).select().single()
+      : await supabase.from('trades').insert({ ...payload, user_id: user.id }).select().single()
 
     if (saveError) {
       setSaving(false)

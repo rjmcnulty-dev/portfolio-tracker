@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 export function useDepositSchedules(account = 'All') {
+  const { user } = useAuth()
   const [schedules, setSchedules] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -39,11 +41,13 @@ export function useDepositSchedules(account = 'All') {
 
   const addSchedule = useCallback(
     async (schedule) => {
-      const { error: insertError } = await supabase.from('deposit_schedules').insert(schedule)
+      const { error: insertError } = await supabase
+        .from('deposit_schedules')
+        .insert({ ...schedule, user_id: user.id })
       if (insertError) throw insertError
       await fetchSchedules()
     },
-    [fetchSchedules],
+    [fetchSchedules, user],
   )
 
   const updateSchedule = useCallback(

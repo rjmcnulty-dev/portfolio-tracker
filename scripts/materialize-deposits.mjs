@@ -80,6 +80,7 @@ async function main() {
         deposit_type: schedule.deposit_type,
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : 'Auto-generated recurring deposit',
+        user_id: schedule.user_id,
       })
     }
   }

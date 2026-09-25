@@ -66,6 +66,7 @@ interface Schedule {
   start_date: string;
   end_date: string | null;
   notes: string | null;
+  user_id: string;
 }
 
 function occurrencesUpTo(schedule: Schedule, today: string, stepDays: Record<string, number>): string[] {
@@ -164,6 +165,7 @@ Deno.serve(async (req) => {
         wash_sale_risk: "OK",
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : "Auto-generated recurring trade",
+        user_id: schedule.user_id,
       });
     }
   }

@@ -66,6 +66,7 @@ interface Schedule {
   end_date: string | null;
   deposit_type: string;
   notes: string | null;
+  user_id: string;
 }
 
 function occurrencesUpTo(schedule: Schedule, today: string, stepDays: Record<string, number>): string[] {
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
     deposit_type: string;
     schedule_id: string;
     notes: string;
+    user_id: string;
   }[] = [];
 
   for (const schedule of (schedules ?? []) as Schedule[]) {
@@ -137,6 +139,7 @@ Deno.serve(async (req) => {
         deposit_type: schedule.deposit_type,
         schedule_id: schedule.id,
         notes: schedule.notes ? `Auto-generated: ${schedule.notes}` : "Auto-generated recurring deposit",
+        user_id: schedule.user_id,
       });
     }
   }

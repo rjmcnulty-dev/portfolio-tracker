@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 // Fire-and-forget, deliberately not awaited by the caller — a trade that
 // changes holdings/cash leaves account_value_history's most recent snapshot
@@ -17,6 +18,7 @@ function triggerResnapshot() {
 }
 
 export function useTrades(account = 'All') {
+  const { user } = useAuth()
   const [trades, setTrades] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -56,12 +58,12 @@ export function useTrades(account = 'All') {
 
   const addTrade = useCallback(
     async (trade) => {
-      const { error: insertError } = await supabase.from('trades').insert(trade)
+      const { error: insertError } = await supabase.from('trades').insert({ ...trade, user_id: user.id })
       if (insertError) throw insertError
       await fetchTrades()
       triggerResnapshot()
     },
-    [fetchTrades],
+    [fetchTrades, user],
   )
 
   const updateTrade = useCallback(

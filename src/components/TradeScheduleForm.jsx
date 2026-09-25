@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 import { useAccounts } from '../hooks/useAccounts'
 import { useConfigValue } from '../hooks/useAppConfig'
 import './TradeForm.css'
@@ -23,6 +24,7 @@ const EMPTY_SCHEDULE = {
 }
 
 export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
+  const { user } = useAuth()
   const { accounts, error: accountsError } = useAccounts()
   const FREQUENCIES = useConfigValue('recurring_frequencies', DEFAULT_FREQUENCIES)
   const [form, setForm] = useState(() =>
@@ -58,7 +60,7 @@ export default function TradeScheduleForm({ schedule, onClose, onSaved }) {
 
     const { error: saveError } = schedule?.id
       ? await supabase.from('trade_schedules').update(payload).eq('id', schedule.id)
-      : await supabase.from('trade_schedules').insert(payload)
+      : await supabase.from('trade_schedules').insert({ ...payload, user_id: user.id })
 
     setSaving(false)
 

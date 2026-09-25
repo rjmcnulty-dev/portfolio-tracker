@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
+import RequireAdmin from './components/RequireAdmin'
 import Dashboard from './pages/Dashboard'
 import AccountPage from './pages/AccountPage'
 import TaxPage from './pages/TaxPage'
@@ -35,7 +36,7 @@ function AppRoutes() {
       <ResetPasswordPage
         onDone={() => {
           setPasswordRecovery(false)
-          navigate('/admin', { replace: true })
+          navigate('/', { replace: true })
         }}
       />
     )
@@ -54,7 +55,9 @@ function AppRoutes() {
           <Route path="watch" element={<StockWatchPage />} />
           <Route path="portfolio-stocks" element={<PortfolioStocksPage />} />
           <Route path="tax" element={<TaxPage />} />
-          <Route path="admin" element={<AdminPage />} />
+          <Route element={<RequireAdmin />}>
+            <Route path="admin" element={<AdminPage />} />
+          </Route>
           <Route path="ai-companion" element={<AiCompanionPage />} />
         </Route>
       </Route>
