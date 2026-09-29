@@ -3,6 +3,7 @@ import AdminConfigPage from './AdminConfigPage'
 import AdminSecretsPage from './AdminSecretsPage'
 import AdminTradeTypesPage from './AdminTradeTypesPage'
 import AdminBenchmarksPage from './AdminBenchmarksPage'
+import AdminUsersPage from './AdminUsersPage'
 
 export default function AdminPage() {
   const { user, signOut } = useAuth()
@@ -18,6 +19,13 @@ export default function AdminPage() {
           Sign out
         </button>
       </header>
+      <section className="page__section">
+        <header className="page__header">
+          <h2>Users</h2>
+          <p className="page__subtitle">Invite or create logins for other people — each one gets fully isolated accounts/trades/data.</p>
+        </header>
+        <AdminUsersPage />
+      </section>
       <section className="page__section">
         <header className="page__header">
           <h2>App Settings</h2>

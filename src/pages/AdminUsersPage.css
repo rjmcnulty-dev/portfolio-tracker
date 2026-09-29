@@ -1,0 +1,67 @@
+.admin-users {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+}
+
+.admin-users__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+}
+
+.admin-users__table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid #edf0f3;
+}
+
+.admin-users__table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 14px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.admin-users__add-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.admin-users__add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-users__admin-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.admin-users__error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0;
+  flex-basis: 100%;
+}
+
+.admin-users__saved {
+  color: var(--green);
+  font-size: 13px;
+  margin: 0;
+  flex-basis: 100%;
+}

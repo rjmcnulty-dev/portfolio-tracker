@@ -83,6 +83,15 @@ verify_jwt = false
 import_map = "./functions/reveal-secret/deno.json"
 entrypoint = "./functions/reveal-secret/index.ts"
 
+[functions.manage-users]
+enabled = true
+# Same reasoning as manage-secret: creating a login requires the
+# service-role key, so this must be a real admin session, not just the
+# anon key. See README's "Admin: Users" section.
+verify_jwt = true
+import_map = "./functions/manage-users/deno.json"
+entrypoint = "./functions/manage-users/index.ts"
+
 [functions.ai-companion]
 enabled = true
 # Same reasoning as manage-secret: every call here costs real money
