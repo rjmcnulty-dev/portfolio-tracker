@@ -7,13 +7,18 @@ import { useProfile } from '../hooks/useProfile'
 // shared secrets this gates is the server-side check in the manage-secret
 // Edge Function, since a client-side redirect can't stop a direct API call.
 export default function RequireAdmin() {
-  const { user } = useAuth()
-  const { profile, loading, error } = useProfile(user?.id)
+  // useAuth() is called independently here (its own session-resolution
+  // race, same as every other call site) — `user` can still be `undefined`
+  // on this component's first render even though some other component
+  // (e.g. Layout) already resolved it. useProfile(undefined) bails out
+  // *synchronously* (loading: false, profile: null), so checking only
+  // useProfile's loading let this redirect fire before auth had even
+  // resolved the real user — the actual bug behind a real "can't reach
+  // Admin" report. Must wait for both.
+  const { user, loading: authLoading } = useAuth()
+  const { profile, loading: profileLoading } = useProfile(user?.id)
 
-  // TEMPORARY diagnostic — see multi-user migration notes.
-  console.log('[RequireAdmin]', { userId: user?.id, loading, profile, profileType: typeof profile, isArray: Array.isArray(profile), error })
-
-  if (loading) return null
+  if (authLoading || profileLoading) return null
   if (!profile?.is_admin) return <Navigate to="/" replace />
   return <Outlet />
 }
