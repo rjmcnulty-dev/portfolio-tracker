@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { describeEdgeFunctionError } from '../lib/edgeFunctionError'
 import './AdminSecretsPage.css'
 
 const SECRETS = [
@@ -25,7 +26,7 @@ function SecretRow({ secretKey, label }) {
         body: { action: 'status', key: secretKey },
       })
       if (ignore) return
-      if (invokeError) setError(invokeError.message)
+      if (invokeError) setError(await describeEdgeFunctionError(invokeError))
       else if (data?.error) setError(data.error)
       else setStatus(data)
       setLoadingStatus(false)
@@ -50,7 +51,7 @@ function SecretRow({ secretKey, label }) {
 
     setSaving(false)
     if (invokeError) {
-      setError(invokeError.message)
+      setError(await describeEdgeFunctionError(invokeError))
       return
     }
     if (data?.error) {

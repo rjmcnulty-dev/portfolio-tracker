@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { describeEdgeFunctionError } from '../lib/edgeFunctionError'
 import ConfirmDialog from '../components/ConfirmDialog'
 import './AdminUsersPage.css'
 
@@ -36,7 +37,7 @@ export default function AdminUsersPage() {
     const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
       body: { action: 'list' },
     })
-    if (invokeError) setListError(invokeError.message)
+    if (invokeError) setListError(await describeEdgeFunctionError(invokeError))
     else if (data?.error) setListError(data.error)
     else {
       setListError(null)
@@ -71,7 +72,7 @@ export default function AdminUsersPage() {
 
     setSaving(false)
     if (invokeError) {
-      setSaveError(invokeError.message)
+      setSaveError(await describeEdgeFunctionError(invokeError))
       return
     }
     if (data?.error) {
@@ -100,7 +101,8 @@ export default function AdminUsersPage() {
 
     setResendingId(null)
     if (invokeError) {
-      setResendResultById((prev) => ({ ...prev, [u.id]: { error: invokeError.message } }))
+      const message = await describeEdgeFunctionError(invokeError)
+      setResendResultById((prev) => ({ ...prev, [u.id]: { error: message } }))
       return
     }
     if (data?.error) {
@@ -120,7 +122,8 @@ export default function AdminUsersPage() {
 
     setTogglingId(null)
     if (invokeError) {
-      setRowErrorById((prev) => ({ ...prev, [u.id]: invokeError.message }))
+      const message = await describeEdgeFunctionError(invokeError)
+      setRowErrorById((prev) => ({ ...prev, [u.id]: message }))
       return
     }
     if (data?.error) {
@@ -142,7 +145,8 @@ export default function AdminUsersPage() {
 
     setDeletingId(null)
     if (invokeError) {
-      setRowErrorById((prev) => ({ ...prev, [target.id]: invokeError.message }))
+      const message = await describeEdgeFunctionError(invokeError)
+      setRowErrorById((prev) => ({ ...prev, [target.id]: message }))
       return
     }
     if (data?.error) {

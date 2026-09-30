@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { EMPTY_USAGE, sumUsage } from '../lib/aiUsagePricing'
+import { describeEdgeFunctionError } from '../lib/edgeFunctionError'
 
 const TITLE_MAX_CHARS = 60
 
@@ -12,26 +13,6 @@ function deriveTitle(text) {
 
 function sortByUpdatedDesc(list) {
   return [...list].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
-}
-
-// supabase-js's functions.invoke() throws a FunctionsHttpError whose message
-// is just the generic "Edge Function returned a non-2xx status code" — the
-// actual reason (missing API key, rate limit, Anthropic error, etc.) is only
-// in the response body, attached as `error.context` (the raw Response). This
-// digs that out so the UI can show the real reason instead of the wrapper
-// text. Non-invoke errors (e.g. a Postgrest error from the ai_messages
-// insert) have no `.context` and fall through to their own message as-is.
-async function describeError(err) {
-  const context = err?.context
-  if (context && typeof context.json === 'function') {
-    try {
-      const body = await context.clone().json()
-      if (body?.error) return body.error
-    } catch {
-      // Response wasn't JSON, or already consumed — fall through below.
-    }
-  }
-  return err?.message ?? 'Something went wrong'
 }
 
 // Persists conversations/messages to ai_conversations/ai_messages (both
@@ -164,7 +145,7 @@ export function useAiCompanion(portfolioContext) {
           sortByUpdatedDesc(prev.map((c) => (c.id === convId ? { ...c, updated_at: updatedAt } : c))),
         )
       } catch (err) {
-        setError(await describeError(err))
+        setError(await describeEdgeFunctionError(err))
       } finally {
         setSending(false)
       }
