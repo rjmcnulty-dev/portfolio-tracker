@@ -139,21 +139,40 @@ Deno.serve(async (req) => {
     return json({ ok: true, user: { id: newUserId, email } });
   }
 
-  if (body.action === "resendInvite") {
+  if (body.action === "sendPasswordReset") {
     const email = body.email?.trim().toLowerCase();
     if (!email) return json({ error: "email is required" }, 400);
 
-    // inviteUserByEmail only works for a brand-new address — calling it again
-    // for an existing-but-unconfirmed user errors unreliably (documented
-    // Supabase/GoTrue behavior, not something worth working around). A
-    // recovery-style link lands on exactly the same "set your password"
-    // screen (usePasswordRecovery treats any PASSWORD_RECOVERY event
-    // identically regardless of which flow produced it) and works for any
-    // existing user regardless of confirmation status — this is a public
-    // endpoint, so the caller's own client (already proven to be a real
-    // logged-in admin above) is enough; no service-role needed here.
+    // Used both for "Resend Invite" (a not-yet-confirmed user) and the
+    // Admin Users "Reset Password" action's email method (an already-active
+    // user) — the same call works for either case regardless of
+    // confirmation status, and inviteUserByEmail specifically only works for
+    // a brand-new address (calling it again for an existing-but-unconfirmed
+    // user errors unreliably, documented Supabase/GoTrue behavior, not
+    // something worth working around). A recovery-style link lands on
+    // exactly the same "set your password" screen either way
+    // (usePasswordRecovery treats any PASSWORD_RECOVERY event identically
+    // regardless of which flow produced it) — this is a public endpoint, so
+    // the caller's own client (already proven to be a real logged-in admin
+    // above) is enough; no service-role needed here.
     const { error } = await callerClient.auth.resetPasswordForEmail(email, { redirectTo: body.redirectTo });
     if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  if (body.action === "setPassword") {
+    const targetUserId = body.userId;
+    if (!targetUserId) return json({ error: "userId is required" }, 400);
+    const password = body.password ?? "";
+    if (password.length < 6) return json({ error: "Password must be at least 6 characters" }, 400);
+
+    // The Admin Users "Reset Password" action's direct method — sets the
+    // password immediately with no email round-trip, for when the user
+    // can't get to their inbox right now. The admin sees the plaintext
+    // password they just typed (unlike the email method), so this is
+    // deliberately opt-in rather than the default.
+    const { error } = await supabase.auth.admin.updateUserById(targetUserId, { password });
+    if (error) return json({ error: error.message }, 500);
     return json({ ok: true });
   }
 
@@ -217,7 +236,10 @@ Deno.serve(async (req) => {
   }
 
   return json(
-    { error: "action must be 'list', 'invite', 'create', 'resendInvite', 'setActive', 'setAiCompanionAccess', or 'delete'" },
+    {
+      error:
+        "action must be 'list', 'invite', 'create', 'sendPasswordReset', 'setPassword', 'setActive', 'setAiCompanionAccess', or 'delete'",
+    },
     400,
   );
 });

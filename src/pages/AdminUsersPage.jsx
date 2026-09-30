@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { describeEdgeFunctionError } from '../lib/edgeFunctionError'
 import ConfirmDialog from '../components/ConfirmDialog'
+import ResetPasswordDialog from '../components/ResetPasswordDialog'
 import './AdminUsersPage.css'
 
 function formatDate(iso) {
@@ -25,8 +26,8 @@ export default function AdminUsersPage() {
   const [saveError, setSaveError] = useState(null)
   const [savedMessage, setSavedMessage] = useState(null)
 
-  const [resendingId, setResendingId] = useState(null)
-  const [resendResultById, setResendResultById] = useState({})
+  const [resettingPasswordFor, setResettingPasswordFor] = useState(null)
+  const [resetResultById, setResetResultById] = useState({})
 
   const [togglingId, setTogglingId] = useState(null)
   const [rowErrorById, setRowErrorById] = useState({})
@@ -91,27 +92,29 @@ export default function AdminUsersPage() {
     await fetchUsers()
   }
 
-  async function handleResendInvite(u) {
-    setResendingId(u.id)
-    setResendResultById((prev) => ({ ...prev, [u.id]: null }))
+  async function handleResetPassword({ method, password }) {
+    const target = resettingPasswordFor
+    setResetResultById((prev) => ({ ...prev, [target.id]: null }))
 
     // Same bare-URL reasoning as handleAdd above.
     const redirectTo = `${window.location.origin}${window.location.pathname}`
-    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
-      body: { action: 'resendInvite', email: u.email, redirectTo },
-    })
+    const body =
+      method === 'direct'
+        ? { action: 'setPassword', userId: target.id, password }
+        : { action: 'sendPasswordReset', email: target.email, redirectTo }
+    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', { body })
 
-    setResendingId(null)
     if (invokeError) {
       const message = await describeEdgeFunctionError(invokeError)
-      setResendResultById((prev) => ({ ...prev, [u.id]: { error: message } }))
-      return
+      return { error: message }
     }
-    if (data?.error) {
-      setResendResultById((prev) => ({ ...prev, [u.id]: { error: data.error } }))
-      return
-    }
-    setResendResultById((prev) => ({ ...prev, [u.id]: { ok: true } }))
+    if (data?.error) return { error: data.error }
+
+    setResettingPasswordFor(null)
+    setResetResultById((prev) => ({
+      ...prev,
+      [target.id]: { ok: true, message: method === 'direct' ? 'Password set' : 'Reset email sent' },
+    }))
   }
 
   async function handleToggleActive(u) {
@@ -206,7 +209,7 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map((u) => {
-              const resendResult = resendResultById[u.id]
+              const resetResult = resetResultById[u.id]
               const rowError = rowErrorById[u.id]
               const isSelf = u.id === currentUser?.id
               return (
@@ -234,20 +237,11 @@ export default function AdminUsersPage() {
                   <td>{formatDate(u.createdAt)}</td>
                   <td>{formatDate(u.lastSignInAt)}</td>
                   <td className="admin-users__row-actions">
-                    {!u.lastSignInAt && (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-link"
-                          disabled={resendingId === u.id}
-                          onClick={() => handleResendInvite(u)}
-                        >
-                          {resendingId === u.id ? 'Sending…' : 'Resend Invite'}
-                        </button>
-                        {resendResult?.ok && <span className="admin-users__saved">Sent</span>}
-                        {resendResult?.error && <span className="admin-users__error">{resendResult.error}</span>}
-                      </>
-                    )}
+                    <button type="button" className="btn-link" onClick={() => setResettingPasswordFor(u)}>
+                      {u.lastSignInAt ? 'Reset Password' : 'Resend Invite'}
+                    </button>
+                    {resetResult?.ok && <span className="admin-users__saved">{resetResult.message}</span>}
+                    {resetResult?.error && <span className="admin-users__error">{resetResult.error}</span>}
                     {!isSelf && (
                       <button
                         type="button"
@@ -330,6 +324,14 @@ export default function AdminUsersPage() {
           message={`Permanently delete ${confirmingDelete.email}? This can't be undone. If they still have any accounts, trades, or other data attached, the delete will be blocked until that's removed.`}
           onCancel={() => setConfirmingDelete(null)}
           onConfirm={handleConfirmDelete}
+        />
+      )}
+
+      {resettingPasswordFor && (
+        <ResetPasswordDialog
+          email={resettingPasswordFor.email}
+          onCancel={() => setResettingPasswordFor(null)}
+          onSubmit={handleResetPassword}
         />
       )}
     </div>
