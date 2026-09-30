@@ -20,6 +20,9 @@ export default function AdminUsersPage() {
   const [saveError, setSaveError] = useState(null)
   const [savedMessage, setSavedMessage] = useState(null)
 
+  const [resendingId, setResendingId] = useState(null)
+  const [resendResultById, setResendResultById] = useState({})
+
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
@@ -77,6 +80,28 @@ export default function AdminUsersPage() {
     await fetchUsers()
   }
 
+  async function handleResendInvite(u) {
+    setResendingId(u.id)
+    setResendResultById((prev) => ({ ...prev, [u.id]: null }))
+
+    // Same bare-URL reasoning as handleAdd above.
+    const redirectTo = `${window.location.origin}${window.location.pathname}`
+    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'resendInvite', email: u.email, redirectTo },
+    })
+
+    setResendingId(null)
+    if (invokeError) {
+      setResendResultById((prev) => ({ ...prev, [u.id]: { error: invokeError.message } }))
+      return
+    }
+    if (data?.error) {
+      setResendResultById((prev) => ({ ...prev, [u.id]: { error: data.error } }))
+      return
+    }
+    setResendResultById((prev) => ({ ...prev, [u.id]: { ok: true } }))
+  }
+
   return (
     <div className="admin-users">
       <p className="page__hint">
@@ -97,17 +122,37 @@ export default function AdminUsersPage() {
               <th>Admin</th>
               <th>Created</th>
               <th>Last Sign-in</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.email}</td>
-                <td>{u.isAdmin ? 'Yes' : '—'}</td>
-                <td>{formatDate(u.createdAt)}</td>
-                <td>{formatDate(u.lastSignInAt)}</td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const resendResult = resendResultById[u.id]
+              return (
+                <tr key={u.id}>
+                  <td>{u.email}</td>
+                  <td>{u.isAdmin ? 'Yes' : '—'}</td>
+                  <td>{formatDate(u.createdAt)}</td>
+                  <td>{formatDate(u.lastSignInAt)}</td>
+                  <td className="admin-users__row-actions">
+                    {!u.lastSignInAt && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          disabled={resendingId === u.id}
+                          onClick={() => handleResendInvite(u)}
+                        >
+                          {resendingId === u.id ? 'Sending…' : 'Resend Invite'}
+                        </button>
+                        {resendResult?.ok && <span className="admin-users__saved">Sent</span>}
+                        {resendResult?.error && <span className="admin-users__error">{resendResult.error}</span>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

@@ -29,6 +29,18 @@
   vertical-align: middle;
 }
 
+.admin-users__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.admin-users__row-actions .admin-users__saved,
+.admin-users__row-actions .admin-users__error {
+  flex-basis: auto;
+}
+
 .admin-users__add-form {
   display: flex;
   align-items: flex-end;

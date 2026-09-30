@@ -116,7 +116,25 @@ Deno.serve(async (req) => {
     return json({ ok: true, user: { id: newUserId, email } });
   }
 
-  return json({ error: "action must be 'list', 'invite', or 'create'" }, 400);
+  if (body.action === "resendInvite") {
+    const email = body.email?.trim().toLowerCase();
+    if (!email) return json({ error: "email is required" }, 400);
+
+    // inviteUserByEmail only works for a brand-new address — calling it again
+    // for an existing-but-unconfirmed user errors unreliably (documented
+    // Supabase/GoTrue behavior, not something worth working around). A
+    // recovery-style link lands on exactly the same "set your password"
+    // screen (usePasswordRecovery treats any PASSWORD_RECOVERY event
+    // identically regardless of which flow produced it) and works for any
+    // existing user regardless of confirmation status — this is a public
+    // endpoint, so the caller's own client (already proven to be a real
+    // logged-in admin above) is enough; no service-role needed here.
+    const { error } = await callerClient.auth.resetPasswordForEmail(email, { redirectTo: body.redirectTo });
+    if (error) return json({ error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  return json({ error: "action must be 'list', 'invite', 'create', or 'resendInvite'" }, 400);
 });
 
 /* To invoke locally:
