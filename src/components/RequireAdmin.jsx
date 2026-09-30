@@ -8,7 +8,10 @@ import { useProfile } from '../hooks/useProfile'
 // Edge Function, since a client-side redirect can't stop a direct API call.
 export default function RequireAdmin() {
   const { user } = useAuth()
-  const { profile, loading } = useProfile(user?.id)
+  const { profile, loading, error } = useProfile(user?.id)
+
+  // TEMPORARY diagnostic — see multi-user migration notes.
+  console.log('[RequireAdmin]', { userId: user?.id, loading, profile, profileType: typeof profile, isArray: Array.isArray(profile), error })
 
   if (loading) return null
   if (!profile?.is_admin) return <Navigate to="/" replace />
