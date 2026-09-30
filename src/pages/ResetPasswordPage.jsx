@@ -42,7 +42,7 @@ export default function ResetPasswordPage({ onDone }) {
           <h1 className="login-page__title">Password updated</h1>
           <p className="login-page__subtitle">You're signed in with your new password.</p>
           <button type="button" className="btn btn--primary" onClick={onDone}>
-            Continue to Admin
+            Continue
           </button>
         </div>
       </div>
@@ -53,7 +53,7 @@ export default function ResetPasswordPage({ onDone }) {
     <div className="login-page">
       <form className="login-page__card" onSubmit={handleSubmit}>
         <h1 className="login-page__title">Set a new password</h1>
-        <p className="login-page__subtitle">Choose a new password for your admin account.</p>
+        <p className="login-page__subtitle">Choose a password for your account.</p>
         <label>
           New Password
           <input
