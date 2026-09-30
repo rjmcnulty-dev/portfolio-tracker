@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import ConfirmDialog from '../components/ConfirmDialog'
 import './AdminUsersPage.css'
 
 function formatDate(iso) {
@@ -8,6 +10,7 @@ function formatDate(iso) {
 }
 
 export default function AdminUsersPage() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState(null)
@@ -22,6 +25,11 @@ export default function AdminUsersPage() {
 
   const [resendingId, setResendingId] = useState(null)
   const [resendResultById, setResendResultById] = useState({})
+
+  const [togglingId, setTogglingId] = useState(null)
+  const [rowErrorById, setRowErrorById] = useState({})
+  const [confirmingDelete, setConfirmingDelete] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -102,6 +110,48 @@ export default function AdminUsersPage() {
     setResendResultById((prev) => ({ ...prev, [u.id]: { ok: true } }))
   }
 
+  async function handleToggleActive(u) {
+    setTogglingId(u.id)
+    setRowErrorById((prev) => ({ ...prev, [u.id]: null }))
+
+    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'setActive', userId: u.id, active: !u.active },
+    })
+
+    setTogglingId(null)
+    if (invokeError) {
+      setRowErrorById((prev) => ({ ...prev, [u.id]: invokeError.message }))
+      return
+    }
+    if (data?.error) {
+      setRowErrorById((prev) => ({ ...prev, [u.id]: data.error }))
+      return
+    }
+    await fetchUsers()
+  }
+
+  async function handleConfirmDelete() {
+    const target = confirmingDelete
+    setConfirmingDelete(null)
+    setDeletingId(target.id)
+    setRowErrorById((prev) => ({ ...prev, [target.id]: null }))
+
+    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'delete', userId: target.id },
+    })
+
+    setDeletingId(null)
+    if (invokeError) {
+      setRowErrorById((prev) => ({ ...prev, [target.id]: invokeError.message }))
+      return
+    }
+    if (data?.error) {
+      setRowErrorById((prev) => ({ ...prev, [target.id]: data.error }))
+      return
+    }
+    await fetchUsers()
+  }
+
   return (
     <div className="admin-users">
       <p className="page__hint">
@@ -120,6 +170,7 @@ export default function AdminUsersPage() {
             <tr>
               <th>Email</th>
               <th>Admin</th>
+              <th>Active</th>
               <th>Created</th>
               <th>Last Sign-in</th>
               <th></th>
@@ -128,10 +179,21 @@ export default function AdminUsersPage() {
           <tbody>
             {users.map((u) => {
               const resendResult = resendResultById[u.id]
+              const rowError = rowErrorById[u.id]
+              const isSelf = u.id === currentUser?.id
               return (
                 <tr key={u.id}>
                   <td>{u.email}</td>
                   <td>{u.isAdmin ? 'Yes' : '—'}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={u.active}
+                      disabled={isSelf || togglingId === u.id}
+                      title={isSelf ? "You can't deactivate the account you're signed in as" : undefined}
+                      onChange={() => handleToggleActive(u)}
+                    />
+                  </td>
                   <td>{formatDate(u.createdAt)}</td>
                   <td>{formatDate(u.lastSignInAt)}</td>
                   <td className="admin-users__row-actions">
@@ -149,6 +211,17 @@ export default function AdminUsersPage() {
                         {resendResult?.error && <span className="admin-users__error">{resendResult.error}</span>}
                       </>
                     )}
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        className="btn-link btn-link--danger"
+                        disabled={deletingId === u.id}
+                        onClick={() => setConfirmingDelete(u)}
+                      >
+                        {deletingId === u.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    )}
+                    {rowError && <span className="admin-users__error">{rowError}</span>}
                   </td>
                 </tr>
               )
@@ -204,6 +277,15 @@ export default function AdminUsersPage() {
           {saving ? 'Adding…' : method === 'invite' ? 'Send Invite' : '+ Add User'}
         </button>
       </form>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Delete user?"
+          message={`Permanently delete ${confirmingDelete.email}? This can't be undone. If they still have any accounts, trades, or other data attached, the delete will be blocked until that's removed.`}
+          onCancel={() => setConfirmingDelete(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
     </div>
   )
 }

@@ -52,7 +52,15 @@ Deno.serve(async (req) => {
     return json({ error: "Forbidden — admin only" }, 403);
   }
 
-  let body: { action?: string; email?: string; password?: string; isAdmin?: boolean; redirectTo?: string };
+  let body: {
+    action?: string;
+    email?: string;
+    password?: string;
+    isAdmin?: boolean;
+    redirectTo?: string;
+    userId?: string;
+    active?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -76,6 +84,10 @@ Deno.serve(async (req) => {
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at ?? null,
         isAdmin: adminByUserId.get(u.id) ?? false,
+        // banned_until is either absent/null (never banned) or a timestamp —
+        // Supabase uses a ~100-year-out sentinel for an "indefinite" ban
+        // rather than a literal null, so any future timestamp means banned.
+        active: !u.banned_until || new Date(u.banned_until) <= new Date(),
       }))
       .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 
@@ -134,7 +146,54 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
-  return json({ error: "action must be 'list', 'invite', 'create', or 'resendInvite'" }, 400);
+  if (body.action === "setActive") {
+    const targetUserId = body.userId;
+    if (!targetUserId) return json({ error: "userId is required" }, 400);
+    // Server-side backstop for the same rule the client UI enforces (you
+    // can't deactivate the account you're currently using) — a disabled
+    // button is only a suggestion, this is the actual boundary.
+    if (targetUserId === userData.user.id && !body.active) {
+      return json({ error: "You can't deactivate the account you're currently signed in as." }, 400);
+    }
+
+    // "876000h" (100 years) reads as permanent without needing Supabase's
+    // literal max — ban_duration: "none" is the documented way to unban.
+    const { error } = await supabase.auth.admin.updateUserById(targetUserId, {
+      ban_duration: body.active ? "none" : "876000h",
+    });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  if (body.action === "delete") {
+    const targetUserId = body.userId;
+    if (!targetUserId) return json({ error: "userId is required" }, 400);
+    if (targetUserId === userData.user.id) {
+      return json({ error: "You can't delete the account you're currently signed in as." }, 400);
+    }
+
+    const { error } = await supabase.auth.admin.deleteUser(targetUserId);
+    if (error) {
+      // auth.users has no cascading FK from trades/accounts/etc. on purpose
+      // (see the multi-user migration) — deleting a user who still has real
+      // financial data attached fails at the DB level rather than silently
+      // orphaning or wiping it. Supabase's own error here is just "Database
+      // error deleting user" regardless of the actual reason (confirmed by
+      // testing this exact scenario directly), too generic to show as-is, so
+      // always point at the most likely real cause rather than parsing text
+      // Supabase doesn't actually return.
+      return json(
+        {
+          error:
+            "Couldn't delete this user — they likely still have data attached (accounts, trades, deposits, etc.). Remove it first, or deactivate the account instead.",
+        },
+        400,
+      );
+    }
+    return json({ ok: true });
+  }
+
+  return json({ error: "action must be 'list', 'invite', 'create', 'resendInvite', 'setActive', or 'delete'" }, 400);
 });
 
 /* To invoke locally:
