@@ -2,6 +2,7 @@ import { HashRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
 import RequireAdmin from './components/RequireAdmin'
+import RequireAiCompanion from './components/RequireAiCompanion'
 import Dashboard from './pages/Dashboard'
 import AccountPage from './pages/AccountPage'
 import TaxPage from './pages/TaxPage'
@@ -58,7 +59,9 @@ function AppRoutes() {
           <Route element={<RequireAdmin />}>
             <Route path="admin" element={<AdminPage />} />
           </Route>
-          <Route path="ai-companion" element={<AiCompanionPage />} />
+          <Route element={<RequireAiCompanion />}>
+            <Route path="ai-companion" element={<AiCompanionPage />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

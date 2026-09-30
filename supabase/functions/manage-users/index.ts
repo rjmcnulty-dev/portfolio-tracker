@@ -1,13 +1,18 @@
-// Lets an admin create new logins directly from /admin's Users tab, instead
-// of the Supabase Dashboard — and, critically, creates the matching
-// `profiles` row in the same request, which the Dashboard flow doesn't do on
-// its own (a user created there has no profiles row until someone adds one
-// by hand, which is easy to forget). Same admin-gating pattern as
-// manage-secret: `verify_jwt = true` (see config.toml) only proves the
-// caller has *some* project-signed JWT — the anon key qualifies too — so
-// this additionally confirms a real logged-in session via auth.getUser(),
-// then checks profiles.is_admin before doing anything. auth.admin.* calls
-// require the service-role key, which never reaches the browser.
+// Lets an admin create new logins and manage per-user permissions directly
+// from /admin's Users tab, instead of the Supabase Dashboard — and,
+// critically, creates the matching `profiles` row in the same request,
+// which the Dashboard flow doesn't do on its own (a user created there has
+// no profiles row until someone adds one by hand, which is easy to forget).
+// Same admin-gating pattern as manage-secret: `verify_jwt = true` (see
+// config.toml) only proves the caller has *some* project-signed JWT — the
+// anon key qualifies too — so this additionally confirms a real logged-in
+// session via auth.getUser(), then checks profiles.is_admin before doing
+// anything. auth.admin.* calls require the service-role key, which never
+// reaches the browser. can_use_ai_companion defaults to false for new
+// accounts (see the AI Companion permission migration) since that feature
+// costs real Anthropic API money per use — the actual enforcement of that
+// flag lives server-side in the ai-companion function itself, not here;
+// this is just where an admin flips it.
 import { createClient } from "@supabase/supabase-js";
 
 const CORS_HEADERS = {
@@ -57,6 +62,7 @@ Deno.serve(async (req) => {
     email?: string;
     password?: string;
     isAdmin?: boolean;
+    canUseAiCompanion?: boolean;
     redirectTo?: string;
     userId?: string;
     active?: boolean;
@@ -73,9 +79,11 @@ Deno.serve(async (req) => {
     const { data: userList, error: listError } = await supabase.auth.admin.listUsers();
     if (listError) return json({ error: listError.message }, 500);
 
-    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("user_id, is_admin");
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("user_id, is_admin, can_use_ai_companion");
     if (profilesError) return json({ error: profilesError.message }, 500);
-    const adminByUserId = new Map((profiles ?? []).map((p) => [p.user_id, p.is_admin]));
+    const profileByUserId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
 
     const users = userList.users
       .map((u) => ({
@@ -83,7 +91,8 @@ Deno.serve(async (req) => {
         email: u.email,
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at ?? null,
-        isAdmin: adminByUserId.get(u.id) ?? false,
+        isAdmin: profileByUserId.get(u.id)?.is_admin ?? false,
+        canUseAiCompanion: profileByUserId.get(u.id)?.can_use_ai_companion ?? false,
         // banned_until is either absent/null (never banned) or a timestamp —
         // Supabase uses a ~100-year-out sentinel for an "indefinite" ban
         // rather than a literal null, so any future timestamp means banned.
@@ -122,7 +131,9 @@ Deno.serve(async (req) => {
       newUserId = data.user.id;
     }
 
-    const { error: profileError } = await supabase.from("profiles").insert({ user_id: newUserId, is_admin: isAdmin });
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({ user_id: newUserId, is_admin: isAdmin, can_use_ai_companion: Boolean(body.canUseAiCompanion) });
     if (profileError) return json({ error: `User created, but profile setup failed: ${profileError.message}` }, 500);
 
     return json({ ok: true, user: { id: newUserId, email } });
@@ -165,6 +176,18 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  if (body.action === "setAiCompanionAccess") {
+    const targetUserId = body.userId;
+    if (!targetUserId) return json({ error: "userId is required" }, 400);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ can_use_ai_companion: Boolean(body.canUseAiCompanion) })
+      .eq("user_id", targetUserId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   if (body.action === "delete") {
     const targetUserId = body.userId;
     if (!targetUserId) return json({ error: "userId is required" }, 400);
@@ -193,7 +216,10 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
-  return json({ error: "action must be 'list', 'invite', 'create', 'resendInvite', 'setActive', or 'delete'" }, 400);
+  return json(
+    { error: "action must be 'list', 'invite', 'create', 'resendInvite', 'setActive', 'setAiCompanionAccess', or 'delete'" },
+    400,
+  );
 });
 
 /* To invoke locally:

@@ -27,7 +27,7 @@ export function useProfile(userId) {
     setState((prev) => ({ ...prev, userId, loading: true }))
     supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, can_use_ai_companion')
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error: fetchError }) => {

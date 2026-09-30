@@ -71,6 +71,21 @@ Deno.serve(async (req) => {
     return json({ error: "Unauthorized" }, 401);
   }
 
+  // Being logged in isn't enough — every call here costs real Anthropic API
+  // money, so access is an explicit per-user grant (off by default for new
+  // accounts, see the multi-user migration), not "anyone with a login."
+  // profiles' RLS allows self-select, so the caller's own client can answer
+  // this without needing the service-role client. This is the real boundary
+  // — RequireAiCompanion client-side is just UX, it can't stop a direct call.
+  const { data: profile } = await callerClient
+    .from("profiles")
+    .select("can_use_ai_companion")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+  if (!profile?.can_use_ai_companion) {
+    return json({ error: "Forbidden — AI Companion access is not enabled for this account" }, 403);
+  }
+
   let body: { messages?: ChatMessage[]; portfolioContext?: unknown };
   try {
     body = await req.json();

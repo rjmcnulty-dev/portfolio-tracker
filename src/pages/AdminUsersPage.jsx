@@ -20,6 +20,7 @@ export default function AdminUsersPage() {
   const [method, setMethod] = useState('invite')
   const [password, setPassword] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canUseAiCompanion, setCanUseAiCompanion] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [savedMessage, setSavedMessage] = useState(null)
@@ -67,7 +68,7 @@ export default function AdminUsersPage() {
     // a route.
     const redirectTo = `${window.location.origin}${window.location.pathname}`
     const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
-      body: { action: method, email: trimmed, password, isAdmin, redirectTo },
+      body: { action: method, email: trimmed, password, isAdmin, canUseAiCompanion, redirectTo },
     })
 
     setSaving(false)
@@ -86,6 +87,7 @@ export default function AdminUsersPage() {
     setEmail('')
     setPassword('')
     setIsAdmin(false)
+    setCanUseAiCompanion(false)
     await fetchUsers()
   }
 
@@ -118,6 +120,27 @@ export default function AdminUsersPage() {
 
     const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
       body: { action: 'setActive', userId: u.id, active: !u.active },
+    })
+
+    setTogglingId(null)
+    if (invokeError) {
+      const message = await describeEdgeFunctionError(invokeError)
+      setRowErrorById((prev) => ({ ...prev, [u.id]: message }))
+      return
+    }
+    if (data?.error) {
+      setRowErrorById((prev) => ({ ...prev, [u.id]: data.error }))
+      return
+    }
+    await fetchUsers()
+  }
+
+  async function handleToggleAiCompanion(u) {
+    setTogglingId(u.id)
+    setRowErrorById((prev) => ({ ...prev, [u.id]: null }))
+
+    const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'setAiCompanionAccess', userId: u.id, canUseAiCompanion: !u.canUseAiCompanion },
     })
 
     setTogglingId(null)
@@ -174,6 +197,7 @@ export default function AdminUsersPage() {
             <tr>
               <th>Email</th>
               <th>Admin</th>
+              <th>AI Companion</th>
               <th>Active</th>
               <th>Created</th>
               <th>Last Sign-in</th>
@@ -189,6 +213,15 @@ export default function AdminUsersPage() {
                 <tr key={u.id}>
                   <td>{u.email}</td>
                   <td>{u.isAdmin ? 'Yes' : '—'}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={u.canUseAiCompanion}
+                      disabled={togglingId === u.id}
+                      title="AI Companion costs real API usage per message — off by default for new accounts"
+                      onChange={() => handleToggleAiCompanion(u)}
+                    />
+                  </td>
                   <td>
                     <input
                       type="checkbox"
@@ -272,6 +305,15 @@ export default function AdminUsersPage() {
         <label className="admin-users__admin-label">
           <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
           Make admin
+        </label>
+
+        <label className="admin-users__admin-label" title="Costs real API usage per message — off by default">
+          <input
+            type="checkbox"
+            checked={canUseAiCompanion}
+            onChange={(e) => setCanUseAiCompanion(e.target.checked)}
+          />
+          Enable AI Companion
         </label>
 
         {saveError && <p className="admin-users__error">{saveError}</p>}

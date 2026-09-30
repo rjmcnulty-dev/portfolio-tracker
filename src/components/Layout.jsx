@@ -107,6 +107,7 @@ export default function Layout() {
     .map((key) => TOOL_LINKS.find((t) => t.key === key))
     .filter(Boolean)
     .filter((tool) => tool.key !== 'admin' || profile?.is_admin)
+    .filter((tool) => tool.key !== 'ai-companion' || profile?.can_use_ai_companion)
 
   function handleMoveTool(key, direction) {
     setToolOrder((prev) => {
