@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     return json({ error: "Forbidden — admin only" }, 403);
   }
 
-  let body: { action?: string; email?: string; password?: string; isAdmin?: boolean };
+  let body: { action?: string; email?: string; password?: string; isAdmin?: boolean; redirectTo?: string };
   try {
     body = await req.json();
   } catch {
@@ -89,7 +89,17 @@ Deno.serve(async (req) => {
 
     let newUserId: string;
     if (body.action === "invite") {
-      const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
+      // Without an explicit redirectTo, Supabase falls back to the project's
+      // default Site URL — a leftover `localhost:3000` from initial project
+      // setup nobody ever changed, since nothing needed it until now (the
+      // existing password-reset flow already passes its own explicit
+      // redirectTo for the same reason — see LoginPage.jsx). The client
+      // sends its own origin/pathname, same bare-URL-no-hash reasoning as
+      // that flow: Supabase appends the invite token as its own URL hash,
+      // which would collide with a HashRouter route already living there.
+      const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
+        redirectTo: body.redirectTo,
+      });
       if (error) return json({ error: error.message }, 400);
       newUserId = data.user.id;
     } else {

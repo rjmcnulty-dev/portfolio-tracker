@@ -47,8 +47,15 @@ export default function AdminUsersPage() {
     setSaveError(null)
     setSavedMessage(null)
 
+    // Bare origin+pathname, no hash — same reasoning as LoginPage's password
+    // reset redirectTo: Supabase appends the invite token as its own URL
+    // hash, which would collide with a route already living in our
+    // HashRouter's hash. usePasswordRecovery picks up the resulting session
+    // via Supabase's own auth event instead of relying on that URL to match
+    // a route.
+    const redirectTo = `${window.location.origin}${window.location.pathname}`
     const { data, error: invokeError } = await supabase.functions.invoke('manage-users', {
-      body: { action: method, email: trimmed, password, isAdmin },
+      body: { action: method, email: trimmed, password, isAdmin, redirectTo },
     })
 
     setSaving(false)
